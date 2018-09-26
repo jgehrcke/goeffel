@@ -24,10 +24,16 @@
 
 """
 This program measures the resource utilization of a specific process at a
-specific. It collects the time series data in a buffer and uses separate process
-for emitting these data for later inspection (that is, measurement is decoupled
-from data emission making the sampling rate more predictable when persisting
-data on disk).
+specific sampling rate. Some of the measurement values are the time average of a
+metric measured over the time interval between two samples; other measurement
+values are simply reflecting a momentary state in the moment of taking the
+sample, and again other value types are accumulative (as in the number of events
+that happened between two samples).
+
+This program collects the time series data in a buffer and uses a separate
+process for emitting these data for later inspection (that is, measurement is
+decoupled from data emission making the sampling rate more predictable when
+persisting data on disk).
 
 In addition to sampling process-specific data, this program also measures
 the utilization of system-wide resources making it straightforward to put the
