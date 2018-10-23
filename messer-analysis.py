@@ -71,6 +71,7 @@ def main():
     parser.add_argument('--subtitle', required=True)
     parser.add_argument('--samescale', action='store_true', default=True)
     parser.add_argument('--legend-loc')
+    parser.add_argument('--show-legend-in-plot', default=1, type=int)
     global ARGS
     ARGS = parser.parse_args()
 
@@ -152,8 +153,7 @@ def plot_column_multiple_subplots(dataframe_label_pairs, column_dict):
         )
 
     # Plot individual subplots.
-    for idx0, (dataframe, series_label) in enumerate(dataframe_label_pairs):
-        idx1 = idx0 + 1
+    for idx, (dataframe, series_label) in enumerate(dataframe_label_pairs, 1):
 
         plotsettings = {}
 
@@ -161,16 +161,16 @@ def plot_column_multiple_subplots(dataframe_label_pairs, column_dict):
 
         # Plot y axis label only at central subplot.
         plotsettings['show_y_label'] = \
-            True if idx1 == math.ceil(dataframe_count/2) else False
+            True if idx == math.ceil(dataframe_count/2) else False
 
-        # Show legend only in first row.
-        plotsettings['show_legend'] = True if idx1 == 1 else False
+        # Show legend only in first row (by default, can be modified)
+        plotsettings['show_legend'] = True if idx == ARGS.show_legend_in_plot else False
         plotsettings['series_label'] = series_label
 
         if common_y_limit is not None:
             plotsettings['ylim'] = common_y_limit
 
-        plot_subplot(axs[idx0], column_dict, series, plotsettings)
+        plot_subplot(axs[idx-1], column_dict, series, plotsettings)
 
     # Align the subplots a little nicer, make more use of space. `hspace`: The
     # amount of height reserved for space between subplots, expressed as a
