@@ -70,6 +70,7 @@ def main():
 
     parser.add_argument('--subtitle', required=True)
     parser.add_argument('--samescale', action='store_true', default=True)
+    parser.add_argument('--legend-loc')
     global ARGS
     ARGS = parser.parse_args()
 
@@ -245,7 +246,11 @@ def plot_subplot(ax, column_dict, series, plotsettings):
         legend = ['raw samples']
         if window_width_seconds != 0:
             legend.append('%s s rolling window average' % window_width_seconds)
-        ax.legend(legend, numpoints=4)
+        ax.legend(
+            legend,
+            numpoints=4,
+            loc=ARGS.legend_loc if ARGS.legend_loc else 'best'
+        )
 
     if 'ylim' in plotsettings:
         ax.set_ylim(plotsettings['ylim'])
