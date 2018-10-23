@@ -73,6 +73,14 @@ def main():
     parser.add_argument('--legend-loc')
     parser.add_argument('--show-legend-in-plot', default=1, type=int)
     parser.add_argument('--normalization-factor', default=0, type=float)
+    parser.add_argument(
+        '--custom-y-limit',
+        nargs=2,
+        type=float,
+        metavar=('YLIM_MIN', 'YLIM_MAX'),
+        help='Set a custom global y limit (min, max) to all plots'
+    )
+
     global ARGS
     ARGS = parser.parse_args()
 
@@ -267,6 +275,9 @@ def plot_subplot(ax, column_dict, series, plotsettings):
 
         ax.set_ylim(ylim)
 
+    # A custom Y limit takes precedence over the limit set above.
+    if ARGS.custom_y_limit:
+        ax.set_ylim(ARGS.custom_y_limit)
 
     # Add tiny series_label label in the top-left corner of the subplot.
     ax.text(
