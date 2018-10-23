@@ -72,6 +72,7 @@ def main():
     parser.add_argument('--samescale', action='store_true', default=True)
     parser.add_argument('--legend-loc')
     parser.add_argument('--show-legend-in-plot', default=1, type=int)
+    parser.add_argument('--normalization-factor', default=0, type=float)
     global ARGS
     ARGS = parser.parse_args()
 
@@ -85,7 +86,7 @@ def main():
     column_dicts = []
     keys = ('column_name', 'y_label', 'plot_title', 'rolling_wdw_width_seconds')
     for values in ARGS.column:
-        # Add check that rolling_wdw_width_seconds is an integer.
+        # TODO: add check that rolling_wdw_width_seconds is an integer.
         column_dicts.append(dict(zip(keys, values)))
 
     for column_dict in column_dicts:
@@ -183,11 +184,14 @@ def plot_column_multiple_subplots(dataframe_label_pairs, column_dict):
 
 def plot_subplot(ax, column_dict, series, plotsettings):
 
-    log.info('Plot column %s from %s', column_dict, series)
+    log.info('Plot column %s from %s', column_dict, series.name)
 
     # Set currently active axis to axis object handed over to this function.
     # That makes df.plot() add the data to said axis.
     plt.sca(ax)
+
+    if ARGS.normalization_factor != 0:
+        series = series / ARGS.normalization_factor
 
     # Plot raw samples (1s CPU load averages as determined by pidstat).
     ax = series.plot(
@@ -253,7 +257,16 @@ def plot_subplot(ax, column_dict, series, plotsettings):
         )
 
     if 'ylim' in plotsettings:
-        ax.set_ylim(plotsettings['ylim'])
+
+        ylim = plotsettings['ylim']
+
+        # Divide limits by norm factor if set.
+        nf = ARGS.normalization_factor
+        if nf != 0:
+            ylim = ylim[0] / nf, ylim[1] / nf
+
+        ax.set_ylim(ylim)
+
 
     # Add tiny series_label label in the top-left corner of the subplot.
     ax.text(
