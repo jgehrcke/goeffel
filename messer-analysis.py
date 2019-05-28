@@ -1,17 +1,26 @@
 #!/usr/bin/env python
-# Copyright 2018 Jan-Philip Gehrcke
 #
-# Licensed under the Apache License, Version 2.0 (the "License"); you may not
-# use this file except in compliance with the License. You may obtain a copy of
-# the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-# License for the specific language governing permissions and limitations under
-# the License.
+# MIT License
+
+# Copyright (c) 2018-2019 Dr. Jan-Philip Gehrcke
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
 
 import argparse
 import logging
@@ -22,13 +31,6 @@ import textwrap
 
 from collections import Counter, OrderedDict
 from datetime import datetime, timedelta
-
-import numpy as np
-import pandas as pd
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-plt.style.use('ggplot')
-
 
 logfmt = "%(asctime)s.%(msecs)03d %(name)s %(levelname)s: %(message)s"
 datefmt = "%y%m%d-%H:%M:%S"
@@ -41,16 +43,14 @@ def main():
 
     description = textwrap.dedent(
     """
-    Process and plot one or multiple pidstat time series created via periodic
-    invocation of
-
-        pidstat -hud -p $PID 1 1 | tail -n2 &>> datafile
+    Process and plot one or multiple time series created with messer.py.
     """)
 
     parser = argparse.ArgumentParser(
         description=description,
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
+
     parser.add_argument(
         '--series',
         nargs=2,
@@ -84,6 +84,8 @@ def main():
     global ARGS
     ARGS = parser.parse_args()
 
+    lazy_load_big_packages()
+
     dataframe_label_pairs = []
     for filepath, series_label in ARGS.series:
         dataframe_label_pairs.append(
@@ -101,6 +103,15 @@ def main():
         plot_column_multiple_subplots(dataframe_label_pairs, column_dict)
 
     plt.show()
+
+
+def lazy_load_big_packages():
+    global np, pd, mpl, plt
+    import numpy as np
+    import pandas as pd
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+    plt.style.use('ggplot')
 
 
 def plot_column_multiple_subplots(dataframe_label_pairs, column_dict):
@@ -199,11 +210,10 @@ def plot_subplot(ax, column_dict, series, plotsettings):
     plt.sca(ax)
 
     if ARGS.normalization_factor != 0:
+        log.info('Apply normaliztion factor: %s', ARGS.normalization_factor)
         series = series / ARGS.normalization_factor
 
-    # Plot raw samples (1s CPU load averages as determined by pidstat).
     ax = series.plot(
-        #linestyle='dashdot',
         linestyle='None',
         color='gray',
         marker='.',
@@ -211,7 +221,7 @@ def plot_subplot(ax, column_dict, series, plotsettings):
         markeredgecolor='gray'
     )
 
-    # Conditionally create a rolling window average plot on top of the raw
+    # Conditionally create a rolling window mean plot on top of the raw
     # samples.
     window_width_seconds = int(column_dict['rolling_wdw_width_seconds'])
     if window_width_seconds != 0:
@@ -219,8 +229,13 @@ def plot_subplot(ax, column_dict, series, plotsettings):
         # The raw samples are insightful, especially for seeing the outliers in
         # the distribution. However, also plot a rolling window average. It
         # shows where the distribution has its weight.
-        rolling_average_series = series.rolling(
-            '%ss' % window_width_seconds).sum() / window_width_seconds
+        log.info('Perform rolling window analysis')
+        rollingwindow = series.rolling(
+            window='%ss' % window_width_seconds
+        )
+
+        #rolling_window_mean = rollingwindow.sum() / float(window_width_seconds)
+        rolling_window_mean = rollingwindow.mean()
 
         # In the resulting Series object, the request rate value is assigned to
         # the right window boundary index value (i.e. to the newest timestamp in
@@ -235,9 +250,9 @@ def plot_subplot(ax, column_dict, series, plotsettings):
         # window size to 'the left': shift the timestamp index by a constant /
         # offset.
         offset = pd.DateOffset(seconds=window_width_seconds / 2.0)
-        rolling_average_series.index = rolling_average_series.index - offset
+        rolling_window_mean.index = rolling_window_mean.index - offset
 
-        rolling_average_series.plot(
+        rolling_window_mean.plot(
             #linestyle='solid',
             linestyle='None',
             color='black',
@@ -291,35 +306,22 @@ def plot_subplot(ax, column_dict, series, plotsettings):
 
 def parse_datafile_into_dataframe(datafilepath):
 
-    log.info('Read input from from: %s', datafilepath)
+    log.info('Read data from from: %s', datafilepath)
 
-    # column_names = [
-    #     'time', 'uid', 'pid', 'cpu_usr_pcnt', 'cpu_system_pcnt',
-    #     'cpu_guest_pcnt', 'cpu_pcnt', 'cpu_id', 'disk_kb_rd_s',
-    #     'disk_kb_wr_s', 'disk_kb_ccwr_s', 'command'
-    # ]
+    try:
+        df = pd.read_csv(
+            datafilepath,
+            comment='#',
+            index_col=0
+        )
+    except ValueError as e:
+        log.debug('Falling back to HDF parsing, CSV parsing failed: %s', e)
+        df = pd.read_hdf(datafilepath, key='messer_timeseries')
 
-    # df = pd.read_csv(
-    #     datafilepath,
-    #     delim_whitespace=True,
-    #     comment='#',
-    #     header=None,
-    #     names=column_names,
-    #     index_col=0
-    # )
-
-    df = pd.read_csv(
-        datafilepath,
-        comment='#',
-        index_col=0
-    )
-
-    # Now the dataframe contains an integer index, with unix timestamps. Parse
-    # those into a DateTimeIndex, and replace the dataframe's index with the new
-    # one.
-    timestamps = pd.to_datetime(df.index)
+    # Parse Unix timestamps into a DateTimeIndex object and replace the
+    # dataframe's index (integers) with the new one.
+    timestamps = pd.to_datetime(df['unixtime'], unit='s')
     df.index = timestamps
-
     log.info('Number of samples: %s', len(df))
 
     log.info('Check monotonicity of time index')
@@ -333,13 +335,9 @@ def parse_datafile_into_dataframe(datafilepath):
                 delta
             )
 
-    starttime = timestamps[0]
-    log.info('Starttime with tz: %s', starttime)
-    if starttime.tzinfo:
-        local_starttime = (starttime - starttime.utcoffset()).replace(tzinfo=None)
-        log.info('Starttime (local time): %s', local_starttime)
-
-    timespan = timestamps[-1] - starttime
+    starttime = timestamps.iloc[0]
+    log.info('Starttime (UTC): %s', starttime)
+    timespan = timestamps.iloc[-1] - starttime
     log.info('Time span: %r', pretty_timedelta(timespan))
 
     return df
