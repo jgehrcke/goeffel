@@ -37,7 +37,9 @@ datefmt = "%y%m%d-%H:%M:%S"
 logging.basicConfig(format=logfmt, datefmt=datefmt, level=logging.INFO)
 log = logging.getLogger()
 
+
 ARGS = None
+
 
 def main():
 

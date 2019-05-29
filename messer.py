@@ -109,7 +109,7 @@ logging.basicConfig(
 # values when sampling every 200ms.""
 
 
-PROCESS_SAMPLE_INTERVAL_SECONDS = 0.2
+PROCESS_SAMPLE_INTERVAL_SECONDS = 1
 PROCESS_PID_POLL_INTERVAL_SECONDS = 2.0
 
 # The invocation time is used in various places.
@@ -181,16 +181,17 @@ def main():
         # the sample writer process to terminate.
         samplequeue.put(None)
         samplequeue.close()
+        log.info('Wait for producer buffer to be empty')
         samplequeue.join_thread()
         samplewriter.join()
         log.debug('Sample writer process terminated')
 
 
 class MesserDataSample(tables.IsDescription):
-    # Use the `pos` argument for defining the order of columns in the HDF5
-    # file.
+    # The `pos` argument defines the order of columns in the HDF5 file.
     unixtime = tables.Time64Col(pos=0)
     isotime_local = tables.StringCol(26,pos=1)
+    # System-wide metrics.
     loadavg1 = tables.Float16Col(pos=2)
     loadavg5 = tables.Float16Col(pos=3)
     loadavg15 = tables.Float16Col(pos=4)
@@ -203,6 +204,7 @@ class MesserDataSample(tables.IsDescription):
     system_mem_cached = tables.UInt64Col(pos=11)
     system_mem_active = tables.UInt64Col(pos=12)
     system_mem_inactive = tables.UInt64Col(pos=13)
+    # Process-specific metrics.
     pid = tables.Int32Col(pos=14)
     proc_util_percent_total = tables.Float32Col(pos=15)
     proc_util_percent_user = tables.Float32Col(pos=16)
@@ -227,14 +229,26 @@ def sample_writer_process(queue):
     Ignore SIGINT (default handler in CPython is to raise KeyboardInterrupt,
     which is undesired here). The parent handles it, and instructs the child to
     clean up as part of handling it.
+
+    For the disk I/O operations performed here to not affect the main loop (as
+    of disk write hiccups / latencies) this is being run in a separate process.
+    That is, so the sampling (measurement) itself is decoupled from persisting
+    the data through a Queue-based buffer (in the parent process) between both
+    processes.
     """
     import signal
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
+    try:
+        hostname = platform.node()
+    except Exception as e:
+        log.info('Cannot get system hostname: %s', e)
+        hostname = ''
+
     log.info('Create HDF5 file: %s', ARGS.outfile_hdf5)
 
-    # Interoperability and reliability (reducing risk for corruption) matters,
-    # throughput does not matter so much.
+    # For choosing compression parameters, interoperability and reliability
+    # (reducing risk for corruption) matters more than throughput.
     hdf5_compression_filter = tables.Filters(
         complevel=5, complib='zlib', fletcher32=True)
 
@@ -245,19 +259,17 @@ def sample_writer_process(queue):
         filters=hdf5_compression_filter
     )
 
-    # Note(JP): add messer schema version into the file?
-    # machine hostname?
-
     csvfile = None
     csv_column_header_written = False
     if ARGS.outfile_csv:
         log.info('Create CSV file: %s', ARGS.outfile_csv)
         csvfile = open(ARGS.outfile_csv, 'wb')
-        # TODO: Write comments into header.
-        # Like messer version, time, ...
+        csvfile.write(b'# messer_timeseries\n')
+        csvfile.write(b'# %s\n' (INVOCATION_TIME_LOCAL_STRING, ))
+        csvfile.write(b'# system hostname: %s\n' (hostname, ))
+        csvfile.write(b'# schema version: %s\n' (MESSER_SAMPLE_SCHEMA_VERSION, ))
 
-
-    # No hierarchy, invariant: just a single table per file, with a well-known
+    # Do not use groups. Write a single table per file, with a well-known
     # table name so that the analysis program can discover.
     hdf5table = hdf5file.create_table(
         where='/',
@@ -269,13 +281,6 @@ def sample_writer_process(queue):
     # Set user attributes for storing relevant metadata.
     hdf5table.attrs.invocation_time_unix = INVOCATION_TIME_UNIX_TIMESTAMP
     hdf5table.attrs.invocation_time_local = INVOCATION_TIME_LOCAL_STRING
-
-    try:
-        hostname = platform.node()
-    except Exception as e:
-        log.info('Cannot get system hostname: %s', e)
-        hostname = ''
-
     hdf5table.attrs.system_hostname = hostname
     hdf5table.attrs.messer_schema_version = MESSER_SAMPLE_SCHEMA_VERSION
     hdf5table.attrs.messer_pid_command = ARGS.pid_command
@@ -297,14 +302,26 @@ def sample_writer_process(queue):
             log.debug('Sample writer process: shutting down')
             break
 
-        # Instead of writing to `stdout`, in the future, this is going to
-        # support writing a (binary) file format directly to disk. For this to
-        # not affect the main loop (as of disk write hiccups / latencies) this
-        # being is in a separate process, so that the sampling (measurement)
-        # itself is decoupled from persisting the data through a Queue-based
-        # buffer (in the parent process) between both processes.
-
         time_before_flush = time.monotonic()
+
+        # Simulate I/O slowness.
+        # import random
+        # time.sleep(random.randint(1, 10) / 30.0)
+
+        _write_sample_hdf5(sample, hdf5samplerow, hdf5table)
+
+        # Note(JP): how can we make it so that after this line the HDF5 file is
+        # *valid* and can be opened by other tooling? 'NoneType' object has no
+        # attribute 'get_node'
+        # 2019-05-28 18:27:57,355 - vitables.h5db.dbstreemodel - ERROR - Opening cancelled: file /home/jp/dev/messer/messer_timeseries_20190528_182722.hdf5 already open.
+        _write_sample_csv(sample, csvfile)
+
+        sample_write_latency = time.monotonic() - time_before_flush
+
+        log.debug('Wrote sample to file(s) within %.6f s', sample_write_latency)
+
+
+def _write_sample_hdf5(sample, hdf5samplerow, hdf5table):
 
         for key, value in sample.items():
             hdf5samplerow[key] = value
@@ -315,36 +332,28 @@ def sample_writer_process(queue):
         hdf5samplerow.append()
         hdf5table.flush()
 
-        # Note(JP): how can we make it so that after this line the HDF5 file is
-        # *valid* and can be opened by other tooling? 'NoneType' object has no
-        # attribute 'get_node'
-        # 2019-05-28 18:27:57,355 - vitables.h5db.dbstreemodel - ERROR - Opening cancelled: file /home/jp/dev/messer/messer_timeseries_20190528_182722.hdf5 already open.
+def _write_sample_csv(sample, csvfile):
+    if csvfile is not None:
 
-        if csvfile is not None:
+        samplevalues = tuple(v for k, v in sample.items())
 
-            samplevalues = tuple(v for k, v in sample.items())
+        # Apply a bit of custom formatting.
+        csv_sample_row = (
+            '%.6f, %s, %5.2f, %5.2f, %5.2f, '
+            '%d, %d, %d, %d, %d, %d, %d, %d, %d, '
+            '%d, %5.2f, %5.2f, %5.2f, %d, %d, %d, %d, %d, %d\n' % samplevalues
+        )
 
-            # Apply a bit of custom formatting.
-            csv_sample_row = (
-                '%.6f, %s, %5.2f, %5.2f, %5.2f, '
-                '%d, %d, %d, %d, %d, %d, %d, %d, %d, '
-                '%d, %5.2f, %5.2f, %5.2f, %d, %d, %d, %d, %d, %d\n' % samplevalues
-            )
+        # Write the column header to the CSV file if not yet done. Do that
+        # here so that the column names can be explicitly read from an
+        # (ordered) sample dicitionary.
+        if not csv_column_header_written:
+            csvfile.write(
+                ','.join(k for k in sample.keys()).encode('ascii') + b'\n')
+            csv_column_header_written = True
 
-            # Write the column header to the CSV file if not yet done. Do that
-            # here so that the column names can be explicitly read from an
-            # (ordered) sample dicitionary.
-            if not csv_column_header_written:
-                csvfile.write(
-                    ','.join(k for k in sample.keys()).encode('ascii') + b'\n')
-                csv_column_header_written = True
-
-            csvfile.write(csv_sample_row.encode('ascii'))
-            csvfile.flush()
-
-        sample_write_latency = time.monotonic() - time_before_flush
-
-        log.debug('Wrote sample to file(s) within %.6f s', sample_write_latency)
+        csvfile.write(csv_sample_row.encode('ascii'))
+        csvfile.flush()
 
 
 def mainloop(samplequeue, samplewriter):
@@ -422,26 +431,32 @@ def generate_samples(pid):
     # already errors out when the PID is unknown.
     process = psutil.Process(pid)
 
-    # `time1` is the reference timestamp for differential analysis where a time
-    # difference is in the denominator of a calculation. Use a monotonic time
-    # source for that instead of the system time, and then get the other data
-    # points relevant for the differential analysis (CPU utilization)
-    # immediately after getting `time1`.
-    time1 = time.monotonic()
-    ctime1 = process.cpu_times()
+    # `t_rel1` is the reference timestamp for differential analysis where a time
+    # difference is in the denominator of a calculation:
+    #
+    #           V2 - V1
+    #        --------------
+    #        t_rel2 - t_rel1
+    #
+    #
+    # Use a monotonic time source for measuring t_rel1 (instead of the system
+    # time) and then get the first set of data points relevant for the
+    # differential analysis immediately after getting t_rel1.
+    t_rel1 = time.monotonic()
+    cputimes1 = process.cpu_times()
 
     time.sleep(PROCESS_SAMPLE_INTERVAL_SECONDS)
 
     while True:
 
-        # `time2` and `cpu_times` must be collected immediately one after
-        # another so that the below calculation of CPU utilization (differential
-        # analysis with the time difference in the denominator) is as correct as
-        # possible. Internally, `as_dict()` uses psutil's `oneshot()` context
-        # manager for optimizing the process of collecting the requested data in
-        # one go. The requested attributes are confirmed to be sampled quickly;
-        # tested manually via the timeit module on not-so-well-performing
-        # laptop:
+        # `t_rel2` and `cpu_times` must be collected immediately one after
+        # another in the same order as before so that the below calculation of
+        # CPU utilization (differential analysis with the time difference in the
+        # denominator) is as correct as possible. Internally, `as_dict()` uses
+        # psutil's `oneshot()` context manager for optimizing the process of
+        # collecting the requested data in one go. The requested attributes are
+        # confirmed to be sampled quickly; tested manually via the timeit module
+        # on a not-so-well-performing laptop:
         #
         # >>> import psutil
         # >>> from timeit import timeit
@@ -451,39 +466,54 @@ def generate_samples(pid):
         # 0.0001447438000468537
         #
         # That is, these data are returned within less than a millisecond which
-        # is absolutely tolerable
-        time2 = time.monotonic()
+        # is absolutely tolerable.
+        t_rel2 = time.monotonic()
         datadict = process.as_dict(
             attrs=['cpu_times', 'io_counters', 'memory_info', 'num_fds'])
 
-        # Collect other system-wide data.
+        # Now the data for the timing-sensitive differential anlysis has been
+        # acquired. What follows is the acquisition of system-wide metrics.
+
         # https://serverfault.com/a/85481/121951
         system_mem = psutil.virtual_memory()
         loadavg = os.getloadavg()
 
-        ctime2 = datadict['cpu_times']
+        # Measure and log duration of system interaction for debugging purposes.
+        t_rel_for_debug = time.monotonic()
+        log.debug('Data acquisition took %.6f s', t_rel_for_debug - t_rel2)
+
+        # All data for this sample has been acquired (what follows is data
+        # mangling, but no calls to `os` or `psutil` anymore). Get the current
+        # time T with microsecond resolution and set it as the time that this
+        # sample has been taken. For those values that are built by differential
+        # analysis it means that the value corresponds to the time interval
+        # [T_previous - P, T_current], with P being the sample period [s]. Use
+        # the system time here because it's what's most useful even during clock
+        # drift (P is measured using a monotonic clock source, and during clock
+        # drift T_previous - T_current is not equal to P).
+        time_sample_timestamp = time.time()
+        time_sample_isostring_local = datetime.fromtimestamp(
+            time_sample_timestamp).isoformat()
+
+        # Build CPU utilization values (average CPU utilization within the past
+        # sampling interval).
+        cputimes2 = datadict['cpu_times']
+        _delta_realtime = t_rel2 - t_rel1
+        _delta_cputimes_user = cputimes2.user - cputimes1.user
+        _delta_cputimes_system = cputimes2.system - cputimes1.system
+        _delta_cputimes_total = _delta_cputimes_user + _delta_cputimes_system
+        proc_util_percent_total = 100 * _delta_cputimes_total / _delta_realtime
+        proc_util_percent_user = 100 * _delta_cputimes_user / _delta_realtime
+        proc_util_percent_system = 100 * _delta_cputimes_system / _delta_realtime
+
         proc_io = datadict['io_counters']
         proc_mem = datadict['memory_info']
         proc_num_fds = datadict['num_fds']
 
-        # Current time with microsecond resolution, in UTC, ISO 8601 format,
-        # local time. Also add a UTC timestamp column.
-        time_now_timestamp = time.time()
-        time_now_isostring_local = datetime.fromtimestamp(time_now_timestamp).isoformat()
-
-        # CPU-time related calculation.
-        delta_realtime = time2 - time1
-        delta_ctime_user = ctime2.user - ctime1.user
-        delta_ctime_system = ctime2.system - ctime1.system
-        delta_ctime_total = delta_ctime_user + delta_ctime_system
-        proc_util_percent_total = 100 * delta_ctime_total / delta_realtime
-        proc_util_percent_user = 100 * delta_ctime_user / delta_realtime
-        proc_util_percent_system = 100 * delta_ctime_system / delta_realtime
-
         # Order matters, but only for the CSV output in the sample writer.
         sampledict = OrderedDict((
-            ('unixtime', time_now_timestamp),
-            ('isotime_local', time_now_isostring_local),
+            ('unixtime', time_sample_timestamp),
+            ('isotime_local', time_sample_isostring_local),
             ('loadavg1', loadavg[0]),
             ('loadavg5', loadavg[1]),
             ('loadavg15', loadavg[2]),
@@ -507,12 +537,14 @@ def generate_samples(pid):
             ('proc_mem_dirty', proc_mem.dirty),
             ('proc_num_fds', proc_num_fds),
         ))
-        yield sampledict
 
         # For differential values, store 'new values' as 'old values' for next
         # iteration.
-        ctime1 = ctime2
-        time1 = time2
+        cputimes1 = cputimes2
+        t_rel1 = t_rel2
+
+        # provide the newly acquired sample to the consumer of this generator.
+        yield sampledict
 
         # Wait (approximately) for the configured sampling interval.
         time.sleep(PROCESS_SAMPLE_INTERVAL_SECONDS)
