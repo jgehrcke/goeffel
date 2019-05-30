@@ -133,6 +133,9 @@ def main():
         epilog=textwrap.dedent(__doc__).strip()
     )
 
+    # Note(JP): build a mode without process-specific monitoring (no pid, no pid
+    # command)?
+
     what = parser.add_mutually_exclusive_group(required=True)
 
     what.add_argument(
@@ -142,7 +145,13 @@ def main():
     what.add_argument('--pid', metavar='PROCESSID', type=int)
 
     # Collect ideas for more flexible configuration.
-    # what.add_argument('--diskusage', action='store_true')
+    # what.add_argument('--diskstats', action='store_true')
+
+    parser.add_argument(
+        '--diskstats',
+        action='append',
+        metavar='DEVICENAME',
+    )
 
     # TODO: make it so that at least one output file method is defined.
     # maybe: require HDF5 to work.
@@ -161,6 +170,26 @@ def main():
 
     global ARGS
     ARGS = parser.parse_args()
+
+    # Import here, delayed, instead of in the header (otherwise the command line
+    # help / error reporting is noticeably slowed down).
+    global psutil
+    import psutil
+
+    # Do some custom argument processing.
+    if ARGS.diskstats:
+        known_devnames = list(psutil.disk_io_counters(perdisk=True).keys())
+        for devname in ARGS.diskstats:
+            if devname not in known_devnames:
+                sys.exit('Invalid disk device name: %s\nAvailable names: %s' % (
+                    devname, ', '.join(known_devnames)))
+
+            # Dynamically add columns to the HDF5 table schema, multiple per
+            # disk name.
+            hdf5_schema_add_column(
+                colname='disk_' + devname + '_utilization',
+                coltype=tables.Float16Col
+            )
 
     # Set up the infrastructure for decoupling measurement (sample collection)
     # from persisting the data.
@@ -187,34 +216,42 @@ def main():
         log.debug('Sample writer process terminated')
 
 
-class MesserDataSample(tables.IsDescription):
-    # The `pos` argument defines the order of columns in the HDF5 file.
-    unixtime = tables.Time64Col(pos=0)
-    isotime_local = tables.StringCol(26,pos=1)
-    # System-wide metrics.
-    loadavg1 = tables.Float16Col(pos=2)
-    loadavg5 = tables.Float16Col(pos=3)
-    loadavg15 = tables.Float16Col(pos=4)
-    system_mem_available = tables.UInt64Col(pos=5)
-    system_mem_total = tables.UInt64Col(pos=6)
-    system_mem_used = tables.UInt64Col(pos=7)
-    system_mem_free = tables.UInt64Col(pos=8)
-    system_mem_shared = tables.UInt64Col(pos=9)
-    system_mem_buffers = tables.UInt64Col(pos=10)
-    system_mem_cached = tables.UInt64Col(pos=11)
-    system_mem_active = tables.UInt64Col(pos=12)
-    system_mem_inactive = tables.UInt64Col(pos=13)
-    # Process-specific metrics.
-    pid = tables.Int32Col(pos=14)
-    proc_util_percent_total = tables.Float32Col(pos=15)
-    proc_util_percent_user = tables.Float32Col(pos=16)
-    proc_util_percent_system = tables.Float32Col(pos=17)
-    proc_io_read_chars = tables.UInt64Col(pos=18)
-    proc_io_write_chars = tables.UInt64Col(pos=19)
-    proc_mem_rss = tables.UInt64Col(pos=20)
-    proc_mem_vms = tables.UInt64Col(pos=21)
-    proc_mem_dirty = tables.UInt32Col(pos=22)
-    proc_num_fds = tables.UInt32Col(pos=23)
+HDF5_SAMPLE_SCHEMA = {
+    'unixtime': tables.Time64Col(pos=0),
+    'isotime_local': tables.StringCol(26, pos=1),
+
+    # System-wide metrics.,
+    'loadavg1': tables.Float16Col(pos=2),
+    'loadavg5': tables.Float16Col(pos=3),
+    'loadavg15': tables.Float16Col(pos=4),
+    'system_mem_available': tables.UInt64Col(pos=5),
+    'system_mem_total': tables.UInt64Col(pos=6),
+    'system_mem_used': tables.UInt64Col(pos=7),
+    'system_mem_free': tables.UInt64Col(pos=8),
+    'system_mem_shared': tables.UInt64Col(pos=9),
+    'system_mem_buffers': tables.UInt64Col(pos=10),
+    'system_mem_cached': tables.UInt64Col(pos=11),
+    'system_mem_active': tables.UInt64Col(pos=12),
+    'system_mem_inactive': tables.UInt64Col(pos=13),
+
+    # Process-specific metrics.,
+    'pid': tables.Int32Col(pos=14),
+    'proc_util_percent_total': tables.Float32Col(pos=15),
+    'proc_util_percent_user': tables.Float32Col(pos=16),
+    'proc_util_percent_system': tables.Float32Col(pos=17),
+    'proc_io_read_chars': tables.UInt64Col(pos=18),
+    'proc_io_write_chars': tables.UInt64Col(pos=19),
+    'proc_mem_rss': tables.UInt64Col(pos=20),
+    'proc_mem_vms': tables.UInt64Col(pos=21),
+    'proc_mem_dirty': tables.UInt32Col(pos=22),
+    'proc_num_fds': tables.UInt32Col(pos=23),
+}
+
+
+def hdf5_schema_add_column(colname, coltype):
+    assert colname not in HDF5_SAMPLE_SCHEMA
+    colpos = len(HDF5_SAMPLE_SCHEMA) + 1
+    HDF5_SAMPLE_SCHEMA[colname] = coltype(pos=colpos)
 
 
 def sample_writer_process(queue):
@@ -236,6 +273,7 @@ def sample_writer_process(queue):
     the data through a Queue-based buffer (in the parent process) between both
     processes.
     """
+
     import signal
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
@@ -269,16 +307,16 @@ def sample_writer_process(queue):
         csvfile.write(b'# system hostname: %s\n' (hostname, ))
         csvfile.write(b'# schema version: %s\n' (MESSER_SAMPLE_SCHEMA_VERSION, ))
 
-    # Do not use groups. Write a single table per file, with a well-known
+    # Do not use HDF5 groups. Write a single table per file, with a well-known
     # table name so that the analysis program can discover.
     hdf5table = hdf5file.create_table(
         where='/',
         name='messer_timeseries',
-        description=MesserDataSample,
+        description=HDF5_SAMPLE_SCHEMA,
         title='messer.py time series, invocation at ' + INVOCATION_TIME_LOCAL_STRING,
     )
 
-    # Set user attributes for storing relevant metadata.
+    # Use so-called HDF5 table user attributes for storing relevant metadata.
     hdf5table.attrs.invocation_time_unix = INVOCATION_TIME_UNIX_TIMESTAMP
     hdf5table.attrs.invocation_time_local = INVOCATION_TIME_LOCAL_STRING
     hdf5table.attrs.system_hostname = hostname
@@ -291,7 +329,7 @@ def sample_writer_process(queue):
     # if it were a dictionary (although it is actually an extension class),
     # using the column names as keys".
 
-    hdf5samplerow = hdf5table.row
+    # hdf5samplerow = hdf5table.row
 
     while True:
         sample = queue.get()
@@ -308,7 +346,7 @@ def sample_writer_process(queue):
         # import random
         # time.sleep(random.randint(1, 10) / 30.0)
 
-        _write_sample_hdf5(sample, hdf5samplerow, hdf5table)
+        _write_sample_hdf5(sample, hdf5table)
 
         # Note(JP): how can we make it so that after this line the HDF5 file is
         # *valid* and can be opened by other tooling? 'NoneType' object has no
@@ -321,16 +359,17 @@ def sample_writer_process(queue):
         log.debug('Wrote sample to file(s) within %.6f s', sample_write_latency)
 
 
-def _write_sample_hdf5(sample, hdf5samplerow, hdf5table):
+def _write_sample_hdf5(sample,  hdf5table):
 
         for key, value in sample.items():
-            hdf5samplerow[key] = value
+            hdf5table.row[key] = value
 
         # Write sample to pytable's table I/O buffer. Then flush to disk (early
         # and often -- with the small data output rate it's not expected that
         # frequent flushing creates a bottleneck).
-        hdf5samplerow.append()
+        hdf5table.row.append()
         hdf5table.flush()
+
 
 def _write_sample_csv(sample, csvfile):
     if csvfile is not None:
@@ -362,10 +401,6 @@ def mainloop(samplequeue, samplewriter):
     Ctrl+C, and therefore wrapped in a `KeyboardInterrupt` exception handler
     in the caller.
     """
-
-    # Import here, delayed, instead of in the header (otherwise the command line
-    # help / error reporting is noticeably slowed down).
-    import psutil
 
     # Handle case where a specific (constant) PID was provided on the command
     # line. Error out and exit program in the moment the PID cannot be monitored
@@ -444,6 +479,9 @@ def generate_samples(pid):
     # differential analysis immediately after getting t_rel1.
     t_rel1 = time.monotonic()
     cputimes1 = process.cpu_times()
+    diskstats1, diskstats2 = None, None
+    if ARGS.diskstats:
+        diskstats1 = psutil.disk_io_counters(perdisk=True)
 
     time.sleep(PROCESS_SAMPLE_INTERVAL_SECONDS)
 
@@ -470,6 +508,8 @@ def generate_samples(pid):
         t_rel2 = time.monotonic()
         datadict = process.as_dict(
             attrs=['cpu_times', 'io_counters', 'memory_info', 'num_fds'])
+        if ARGS.diskstats:
+            diskstats2 = psutil.disk_io_counters(perdisk=True)
 
         # Now the data for the timing-sensitive differential anlysis has been
         # acquired. What follows is the acquisition of system-wide metrics.
@@ -510,6 +550,8 @@ def generate_samples(pid):
         proc_mem = datadict['memory_info']
         proc_num_fds = datadict['num_fds']
 
+        disksampledict = calc_diskstats(t_rel1, t_rel2, diskstats1, diskstats2)
+
         # Order matters, but only for the CSV output in the sample writer.
         sampledict = OrderedDict((
             ('unixtime', time_sample_timestamp),
@@ -538,9 +580,14 @@ def generate_samples(pid):
             ('proc_num_fds', proc_num_fds),
         ))
 
+        # Add disk sample data to sample dict.
+        for k, v in disksampledict.items():
+            sampledict[k] = v
+
         # For differential values, store 'new values' as 'old values' for next
         # iteration.
         cputimes1 = cputimes2
+        diskstats1 = diskstats2
         t_rel1 = t_rel2
 
         # provide the newly acquired sample to the consumer of this generator.
@@ -548,6 +595,23 @@ def generate_samples(pid):
 
         # Wait (approximately) for the configured sampling interval.
         time.sleep(PROCESS_SAMPLE_INTERVAL_SECONDS)
+
+
+def calc_diskstats(t_rel1, t_rel2, diskstats1, diskstats2):
+
+    sampledict = OrderedDict()
+
+    for devname in ARGS.diskstats:
+
+        # Calculate disk utilization from busy_time.
+        # busy_time is measured in milloseconds
+        delta_v = diskstats2[devname].busy_time - diskstats1[devname].busy_time
+        delta_t = (t_rel2 - t_rel1) * 1000
+
+        utilization_percent = 100 * delta_v / delta_t
+        sampledict['disk_' + devname + '_utilization'] = utilization_percent
+
+    return sampledict
 
 
 def pid_from_cmd(pid_command):
