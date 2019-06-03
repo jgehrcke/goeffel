@@ -180,24 +180,17 @@ def main():
     global psutil
     import psutil
 
-    # Do some custom argument processing.
-    if ARGS.diskstats:
-        known_devnames = list(psutil.disk_io_counters(perdisk=True).keys())
-        for devname in ARGS.diskstats:
-            if devname not in known_devnames:
-                sys.exit('Invalid disk device name: %s\nAvailable names: %s' % (
-                    devname, ', '.join(known_devnames)))
-
-            # Dynamically add columns to the HDF5 table schema, multiple per
-            # disk name.
-            hdf5_schema_add_column(
-                colname='disk_' + devname + '_utilization',
-                coltype=tables.Float16Col
-            )
+    # Do custom argument processing.
+    process_diskstats_args()
 
     # Set up the infrastructure for decoupling measurement (sample collection)
     # from persisting the data.
     samplequeue = multiprocessing.Queue()
+
+    log.info(
+        'Collect time series for the folling metrics: \n%s',
+        '\n'.join(k for k in HDF5_SAMPLE_SCHEMA.keys()))
+
     samplewriter = multiprocessing.Process(
         target=sample_writer_process,
         args=(samplequeue,)
@@ -218,6 +211,28 @@ def main():
         samplequeue.join_thread()
         samplewriter.join()
         log.debug('Sample writer process terminated')
+
+
+def process_diskstats_args():
+
+    if not ARGS.diskstats:
+        return
+
+    known_devnames = list(psutil.disk_io_counters(perdisk=True).keys())
+    for devname in ARGS.diskstats:
+        if devname not in known_devnames:
+            sys.exit('Invalid disk device name: %s\nAvailable names: %s' % (
+                devname, ', '.join(known_devnames)))
+
+        # Dynamically add columns to the HDF5 table schema.
+        column_names = [
+            'disk_' + devname + '_util_percent',
+            'disk_' + devname + '_write_latency_ms',
+            'disk_' + devname + '_read_latency_ms',
+        ]
+
+        for n in column_names:
+            hdf5_schema_add_column(colname=n, coltype=tables.Float32Col)
 
 
 HDF5_SAMPLE_SCHEMA = {
