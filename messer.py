@@ -246,6 +246,8 @@ def process_diskstats_args():
             'disk_' + devname + '_read_latency_ms',
             'disk_' + devname + '_merged_read_rate_hz',
             'disk_' + devname + '_merged_write_rate_hz',
+            'disk_' + devname + '_userspace_read_rate_hz',
+            'disk_' + devname + '_userspace_write_rate_hz',
         ]
 
         # Note(JP): Windows support might be easy to add by conditionally
@@ -655,9 +657,13 @@ def generate_samples(pid):
         time.sleep(PROCESS_SAMPLE_INTERVAL_SECONDS)
 
 
-def calc_diskstats(delta_t, stats1, stats2):
+def calc_diskstats(delta_t, s1, s2):
     """
-    `delta_t` must have unit seconds
+    `delta_t` must have unit seconds.
+
+    `s1` and `s2` must each be an object returned by
+    `psutil.disk_io_counters()`, one at time t1, and the other at the (later)
+    time t2, with t2 - t2 = delta_t.
     """
 
     sampledict = OrderedDict()
@@ -672,9 +678,8 @@ def calc_diskstats(delta_t, stats1, stats2):
         # the ratio between the actual time elapsed and `busy_time`, express it
         # in percent. Percent calc yields factor 100, millisecond conversion
         # yields factor 1000, leaving behind an overall factor 10.
-        delta_busy_time = stats2[dev].busy_time - stats1[dev].busy_time
-        utilization_percent = delta_busy_time / (delta_t * 10)
-        sampledict['disk_' + dev + '_util_percent'] = utilization_percent
+        sampledict['disk_' + dev + '_util_percent'] = \
+            (s2[dev].busy_time - s1[dev].busy_time) / (delta_t * 10)
 
         # Attempt to implement iostat's `w_await` which is documented with "The
         # average time (in  milliseconds)  for  write  requests issued to the
@@ -683,27 +688,26 @@ def calc_diskstats(delta_t, stats1, stats2):
         # documented with "time spent writing to disk (in milliseconds)" and
         # `write_merged_count` which is documented with 'number of merged writes
         # (see iostats doc)".'
-        delta_write_time = stats2[dev].write_time - stats1[dev].write_time
-        delta_mergedwrite_count = stats2[dev].write_merged_count - stats1[dev].write_merged_count
-
         # TODO(JP): explore setting Not A Number, NaN, because that's
         # so much more correct than setting 0.
+        delta_mergedwrite_count = s2[dev].write_merged_count - s1[dev].write_merged_count
         if delta_mergedwrite_count == 0:
             avg_write_latency = 0
         else:
-            avg_write_latency = delta_write_time / delta_mergedwrite_count
+            avg_write_latency = (s2[dev].write_time - s1[dev].write_time) / delta_mergedwrite_count
         sampledict['disk_' + dev + '_write_latency_ms'] = avg_write_latency
 
         # The same as above for r_await.
-        delta_read_time = stats2[dev].read_time - stats1[dev].read_time
-        delta_mergedread_count = stats2[dev].read_merged_count - stats1[dev].read_merged_count
         # TODO(JP): explore setting NaN, for HDF5.
+        delta_mergedread_count = s2[dev].read_merged_count - s1[dev].read_merged_count
         if delta_mergedread_count == 0:
             avg_read_latency = 0
         else:
-            avg_read_latency = delta_read_time / delta_mergedread_count
+            avg_read_latency = (s2[dev].read_time - s1[dev].read_time) / delta_mergedread_count
         sampledict['disk_' + dev + '_read_latency_ms'] = avg_read_latency
 
+        # ## IO request rate, merged by kernel (what the device sees).
+        #
         # On Linux what matters more than the user space read or write request
         # rate, is the _merged_ read or write request rate (the kernel attempts
         # to merge individual user space requests before passing them to the
@@ -713,6 +717,12 @@ def calc_diskstats(delta_t, stats1, stats2):
             delta_mergedwrite_count / delta_t
         sampledict['disk_' + dev + '_merged_read_rate_hz'] = \
             delta_mergedread_count / delta_t
+
+        # ## IO request rate emitted by user space.
+        sampledict['disk_' + dev + '_userspace_write_rate_hz'] = \
+            (s2[dev].write_count - s1[dev].write_count) / delta_t
+        sampledict['disk_' + dev + '_userspace_read_rate_hz'] = \
+            (s2[dev].read_count - s1[dev].read_count) / delta_t
 
     return sampledict
 
