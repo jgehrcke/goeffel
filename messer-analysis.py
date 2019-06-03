@@ -53,6 +53,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
 
+    # TODO(JP): add an option to dump the columns in the data file.
+
     parser.add_argument(
         '--series',
         nargs=2,
