@@ -92,13 +92,22 @@ https://github.com/uber-common/cpustat
 
 References for interpreting output:
 
-Disk statistics:
+  Disk statistics:
 
     - https://unix.stackexchange.com/a/462732 (What are merged writes?)
     - https://blog.serverfault.com/2010/07/06/777852755/ (interpreting iostat output)
     - https://stackoverflow.com/a/8512978 (what is %util in iostat?)
     - https://coderwall.com/p/utc42q/understanding-iostat
 
+Other notes:
+
+    - For writing the HDF5 file we could use pandas' pd.HDFStore implementation.
+      However, already requiring pytables for measurement is a pretty big
+      dependency to meet, and I am trying to get away w/o pandas in the
+      measurement system itself.
+
+    - https://cyrille.rossant.net/moving-away-hdf5/
+    -
 """
 
 
@@ -356,6 +365,12 @@ def sample_writer_process(queue):
 
     # Do not use HDF5 groups. Write a single table per file, with a well-known
     # table name so that the analysis program can discover.
+    # Note(JP): investicate chunk size, and generally explore providing an
+    # expected row count. For example, with a 1 Hz sampling rate aboout 2.5 million
+    # rows are collected within 30 days:
+    # >>> 24 * 60 * 60 * 30
+    # 2592000
+    #
     hdf5table = hdf5file.create_table(
         where='/',
         name='messer_timeseries',
