@@ -229,7 +229,12 @@ def process_diskstats_args():
             'disk_' + devname + '_util_percent',
             'disk_' + devname + '_write_latency_ms',
             'disk_' + devname + '_read_latency_ms',
+            'disk_' + devname + '_merged_read_rate_hz',
+            'disk_' + devname + '_merged_write_rate_hz',
         ]
+
+        # Note(JP): Windows support might be easy to add by conditionally
+        # accounting for certain disk metrics.
 
         for n in column_names:
             hdf5_schema_add_column(colname=n, coltype=tables.Float32Col)
@@ -630,6 +635,9 @@ def generate_samples(pid):
 
 
 def calc_diskstats(delta_t, stats1, stats2):
+    """
+    `delta_t` must have unit seconds
+    """
 
     sampledict = OrderedDict()
 
@@ -655,25 +663,35 @@ def calc_diskstats(delta_t, stats1, stats2):
         # `write_merged_count` which is documented with 'number of merged writes
         # (see iostats doc)".'
         delta_write_time = stats2[dev].write_time - stats1[dev].write_time
-        delta_write_count = stats2[dev].write_merged_count - stats1[dev].write_merged_count
+        delta_mergedwrite_count = stats2[dev].write_merged_count - stats1[dev].write_merged_count
 
         # TODO(JP): explore setting Not A Number, NaN, because that's
-        # so much more correct than settin g0.
-        if delta_write_count == 0:
+        # so much more correct than setting 0.
+        if delta_mergedwrite_count == 0:
             avg_write_latency = 0
         else:
-            avg_write_latency = delta_write_time / delta_write_count
+            avg_write_latency = delta_write_time / delta_mergedwrite_count
         sampledict['disk_' + dev + '_write_latency_ms'] = avg_write_latency
 
         # The same as above for r_await.
         delta_read_time = stats2[dev].read_time - stats1[dev].read_time
-        delta_read_count = stats2[dev].read_merged_count - stats1[dev].read_merged_count
+        delta_mergedread_count = stats2[dev].read_merged_count - stats1[dev].read_merged_count
         # TODO(JP): explore setting NaN, for HDF5.
-        if delta_read_count == 0:
+        if delta_mergedread_count == 0:
             avg_read_latency = 0
         else:
-            avg_read_latency = delta_read_time / delta_read_count
+            avg_read_latency = delta_read_time / delta_mergedread_count
         sampledict['disk_' + dev + '_read_latency_ms'] = avg_read_latency
+
+        # On Linux what matters more than the user space read or write request
+        # rate, is the _merged_ read or write request rate (the kernel attempts
+        # to merge individual user space requests before passing them to the
+        # hardware). For non-random I/O patterns this greatly reduces the of
+        # individual reads and writes issed to disk.
+        sampledict['disk_' + dev + '_merged_write_rate_hz'] = \
+            delta_mergedwrite_count / delta_t
+        sampledict['disk_' + dev + '_merged_read_rate_hz'] = \
+            delta_mergedread_count / delta_t
 
     return sampledict
 
