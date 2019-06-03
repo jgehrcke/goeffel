@@ -40,6 +40,7 @@ the utilization of system-wide resources making it straightforward to put the
 process-specific metrics into context.
 
 This program has been written for and tested on CPython 3.5 and 3.6 on Linux.
+It is as of now not expected to work on BSDs, Darwin, and Windows.
 """
 
 import argparse
@@ -74,7 +75,7 @@ across various versions. Related references:
 The program cpustat open-sourced by Uber
 (https://github.com/uber-common/cpustat) has a promising README about the
 general measurement methodology, and overall seems to be a great tool for our
-ourposes but the methodology around persisting the collected timeseries data is
+purposes but the methodology around persisting the collected timeseries data is
 undocumented. It seems to write some binary file when using `-cpuprofile` but it
 is a little unclear what this file contains.
 
@@ -107,12 +108,13 @@ logging.basicConfig(
 # From the `cpustat` documentation: "Linux CPU time accounting is done in terms
 # of whole "clock ticks", which are often 100ms. This can cause some strange
 # values when sampling every 200ms.""
+PROCESS_SAMPLE_INTERVAL_SECONDS = 0.5
 
 
-PROCESS_SAMPLE_INTERVAL_SECONDS = 1
 PROCESS_PID_POLL_INTERVAL_SECONDS = 2.0
 
-# The invocation time is used in various places.
+
+# Measure invocation time (is consumed in various places).
 INVOCATION_TIME_UNIX_TIMESTAMP = time.time()
 INVOCATION_TIME_LOCAL_STRING = datetime.fromtimestamp(
     INVOCATION_TIME_UNIX_TIMESTAMP).strftime(format='%Y%m%d_%H%M%S')
@@ -135,6 +137,8 @@ def main():
 
     # Note(JP): build a mode without process-specific monitoring (no pid, no pid
     # command)?
+
+    # Note(JP): build a mode where disk IO stats are collected for all disks?
 
     what = parser.add_mutually_exclusive_group(required=True)
 
@@ -446,7 +450,11 @@ def sample_process(pid, samplequeue, samplewriter):
 
         # This writes the data to a buffer in the current process, and a
         # background thread communicates it through a pipe to the worker process
-        # which outputs the data (to stdout or to disk).
+        # which outputs the data (to stdout or to disk). Note(JP): the feeder
+        # thread buffer is of limited size and it's not configurable via an
+        # official interface as far as I see. It might be advisable to prepare
+        # for backpressure by applying some timeout control, and by potentially
+        # wrapping the put() call in a control loop.
         samplequeue.put(sample)
 
 
