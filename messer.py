@@ -439,6 +439,8 @@ def _write_sample_csv(sample, csvfile):
         samplevalues = tuple(v for k, v in sample.items())
 
         # Apply a bit of custom formatting.
+        # Note(JP): store these format strings closer to the column listing,
+        # and assemble a format string dynamically.
         csv_sample_row = (
             '%.6f, %s, %5.2f, %5.2f, %5.2f, '
             '%d, %d, %d, %d, %d, %d, %d, %d, %d, '
@@ -469,7 +471,7 @@ def mainloop(samplequeue, samplewriter):
     # (as of process not existing, insufficient permissions, etc.).
     if ARGS.pid is not None:
         try:
-            sample_process(ARGS.pid, samplequeue)
+            sample_process(ARGS.pid, samplequeue, samplewriter)
         except psutil.Error as exc:
             log.error('Cannot inspect process: %s', exc.msg)
             sys.exit(1)
