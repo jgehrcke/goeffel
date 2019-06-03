@@ -40,7 +40,6 @@ the utilization of system-wide resources making it straightforward to put the
 process-specific metrics into context.
 
 This program has been written for and tested on CPython 3.5 and 3.6 on Linux.
-It is as of now not expected to work on BSDs, Darwin, and Windows.
 """
 
 import argparse
@@ -91,6 +90,15 @@ https://github.com/Leo-G/DevopsWiki/wiki/How-Linux-CPU-Usage-Time-and-Percentage
 http://www.brendangregg.com/usemethod.html
 https://github.com/uber-common/cpustat
 
+References for interpreting output:
+
+Disk statistics:
+
+    - https://unix.stackexchange.com/a/462732 (What are merged writes?)
+    - https://blog.serverfault.com/2010/07/06/777852755/ (interpreting iostat output)
+    - https://stackoverflow.com/a/8512978 (what is %util in iostat?)
+    - https://coderwall.com/p/utc42q/understanding-iostat
+
 """
 
 
@@ -139,6 +147,13 @@ def main():
     # command)?
 
     # Note(JP): build a mode where disk IO stats are collected for all disks?
+
+    # Note(JP): build in a concept that allows for "running this permanently",
+    # by building a retention policy, rotating HDF5 files (and deleting old
+    # ones), or something along these lines.
+
+    # TODO(JP): measure performance impact of messer with another instance of
+    # messer.
 
     what = parser.add_mutually_exclusive_group(required=True)
 
@@ -240,11 +255,17 @@ def process_diskstats_args():
             hdf5_schema_add_column(colname=n, coltype=tables.Float32Col)
 
 
+# This defines the initial set of columns, more columns can be added dynamically
+# by the program, based on discovery or command line arguments.
 HDF5_SAMPLE_SCHEMA = {
+    # Store time in two formats: for flexible analyses store the unix time stamp
+    # with subsecond precision, and for convenience it is good to also have a
+    # string representation of the local time (also with subsecond precision)
+    # stored.
     'unixtime': tables.Time64Col(pos=0),
     'isotime_local': tables.StringCol(26, pos=1),
 
-    # System-wide metrics.,
+    # System-wide metrics.
     'system_loadavg1': tables.Float16Col(pos=2),
     'system_loadavg5': tables.Float16Col(pos=3),
     'system_loadavg15': tables.Float16Col(pos=4),
@@ -258,7 +279,7 @@ HDF5_SAMPLE_SCHEMA = {
     'system_mem_active': tables.UInt64Col(pos=12),
     'system_mem_inactive': tables.UInt64Col(pos=13),
 
-    # Process-specific metrics.,
+    # Process-specific metrics.
     'proc_pid': tables.Int32Col(pos=14),
     'proc_util_percent_total': tables.Float32Col(pos=15),
     'proc_util_percent_user': tables.Float32Col(pos=16),
