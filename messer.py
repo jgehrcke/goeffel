@@ -528,6 +528,15 @@ def generate_samples(pid):
         #
         # That is, these data are returned within less than a millisecond which
         # is absolutely tolerable.
+        #
+        # `psutil.disk_io_counters()` is similarly fast on my test machine
+        # >>> timeit('psutil.disk_io_counters(perdisk=True)', number=100, globals=globals()) / 100
+        # 0.0002499251801054925
+        #
+        # Do not do this by default though because on systems with a complex
+        # disk setup I am not sure if it's wise to collect all disk stats
+        # by default.
+
         t_rel2 = time.monotonic()
         datadict = process.as_dict(
             attrs=['cpu_times', 'io_counters', 'memory_info', 'num_fds'])
@@ -561,19 +570,19 @@ def generate_samples(pid):
         # Build CPU utilization values (average CPU utilization within the past
         # sampling interval).
         cputimes2 = datadict['cpu_times']
-        _delta_realtime = t_rel2 - t_rel1
+        delta_t = t_rel2 - t_rel1
         _delta_cputimes_user = cputimes2.user - cputimes1.user
         _delta_cputimes_system = cputimes2.system - cputimes1.system
         _delta_cputimes_total = _delta_cputimes_user + _delta_cputimes_system
-        proc_util_percent_total = 100 * _delta_cputimes_total / _delta_realtime
-        proc_util_percent_user = 100 * _delta_cputimes_user / _delta_realtime
-        proc_util_percent_system = 100 * _delta_cputimes_system / _delta_realtime
+        proc_util_percent_total = 100 * _delta_cputimes_total / delta_t
+        proc_util_percent_user = 100 * _delta_cputimes_user / delta_t
+        proc_util_percent_system = 100 * _delta_cputimes_system / delta_t
 
         proc_io = datadict['io_counters']
         proc_mem = datadict['memory_info']
         proc_num_fds = datadict['num_fds']
 
-        disksampledict = calc_diskstats(t_rel1, t_rel2, diskstats1, diskstats2)
+        disksampledict = calc_diskstats(delta_t, diskstats1, diskstats2)
 
         # Order matters, but only for the CSV output in the sample writer.
         sampledict = OrderedDict((
@@ -620,19 +629,51 @@ def generate_samples(pid):
         time.sleep(PROCESS_SAMPLE_INTERVAL_SECONDS)
 
 
-def calc_diskstats(t_rel1, t_rel2, diskstats1, diskstats2):
+def calc_diskstats(delta_t, stats1, stats2):
 
     sampledict = OrderedDict()
 
-    for devname in ARGS.diskstats:
+    for dev in ARGS.diskstats:
 
-        # Calculate disk utilization from busy_time.
-        # busy_time is measured in milloseconds
-        delta_v = diskstats2[devname].busy_time - diskstats1[devname].busy_time
-        delta_t = (t_rel2 - t_rel1) * 1000
+        # Attempt to implements iostat's `%util` metric which is documented with
+        # "Percentage of elapsed time during which I/O requests were issued  to
+        # the  device  (bandwidth  utilization  for the device)."
+        # Calculate disk utilization from `busy_time` which is documented by
+        # psutil with "time spent doing actual I/Os (in milliseconds)". Build
+        # the ratio between the actual time elapsed and `busy_time`, express it
+        # in percent. Percent calc yields factor 100, millisecond conversion
+        # yields factor 1000, leaving behind an overall factor 10.
+        delta_busy_time = stats2[dev].busy_time - stats1[dev].busy_time
+        utilization_percent = delta_busy_time / (delta_t * 10)
+        sampledict['disk_' + dev + '_util_percent'] = utilization_percent
 
-        utilization_percent = 100 * delta_v / delta_t
-        sampledict['disk_' + devname + '_utilization'] = utilization_percent
+        # Attempt to implement iostat's `w_await` which is documented with "The
+        # average time (in  milliseconds)  for  write  requests issued to the
+        # device to be served. This includes the time spent by the requests in
+        # queue and the time spent servicing them. Use `write_time` which is
+        # documented with "time spent writing to disk (in milliseconds)" and
+        # `write_merged_count` which is documented with 'number of merged writes
+        # (see iostats doc)".'
+        delta_write_time = stats2[dev].write_time - stats1[dev].write_time
+        delta_write_count = stats2[dev].write_merged_count - stats1[dev].write_merged_count
+
+        # TODO(JP): explore setting Not A Number, NaN, because that's
+        # so much more correct than settin g0.
+        if delta_write_count == 0:
+            avg_write_latency = 0
+        else:
+            avg_write_latency = delta_write_time / delta_write_count
+        sampledict['disk_' + dev + '_write_latency_ms'] = avg_write_latency
+
+        # The same as above for r_await.
+        delta_read_time = stats2[dev].read_time - stats1[dev].read_time
+        delta_read_count = stats2[dev].read_merged_count - stats1[dev].read_merged_count
+        # TODO(JP): explore setting NaN, for HDF5.
+        if delta_read_count == 0:
+            avg_read_latency = 0
+        else:
+            avg_read_latency = delta_read_time / delta_read_count
+        sampledict['disk_' + dev + '_read_latency_ms'] = avg_read_latency
 
     return sampledict
 
