@@ -297,8 +297,8 @@ HDF5_SAMPLE_SCHEMA = {
     'proc_util_percent_total': tables.Float32Col(pos=15),
     'proc_util_percent_user': tables.Float32Col(pos=16),
     'proc_util_percent_system': tables.Float32Col(pos=17),
-    'proc_io_read_chars': tables.UInt64Col(pos=18),
-    'proc_io_write_chars': tables.UInt64Col(pos=19),
+    'proc_io_read_rate_bps': tables.Float32Col(pos=18),
+    'proc_io_write_rate_bps': tables.Float32Col(pos=19),
     'proc_mem_rss': tables.UInt64Col(pos=20),
     'proc_mem_vms': tables.UInt64Col(pos=21),
     'proc_mem_dirty': tables.UInt32Col(pos=22),
@@ -544,11 +544,11 @@ def generate_samples(pid):
     #        t_rel2 - t_rel1
     #
     #
-    # Use a monotonic time source for measuring t_rel1 (instead of the system
-    # time) and then get the first set of data points relevant for the
-    # differential analysis immediately after getting t_rel1.
+    # Use a monotonic time source for measuring t_rel1 (and later t_rel2)
+    # instead of the system time and then get the first set of data points
+    # relevant for the differential analysis immediately after getting t_rel1.
     t_rel1 = time.monotonic()
-    cputimes1 = process.cpu_times()
+    procstats1 = process.as_dict(attrs=['cpu_times', 'io_counters', 'memory_info', 'num_fds'])
     diskstats1, diskstats2 = None, None
     if ARGS.diskstats:
         diskstats1 = psutil.disk_io_counters(perdisk=True)
@@ -585,8 +585,7 @@ def generate_samples(pid):
         # by default.
 
         t_rel2 = time.monotonic()
-        datadict = process.as_dict(
-            attrs=['cpu_times', 'io_counters', 'memory_info', 'num_fds'])
+        procstats2 = process.as_dict(attrs=['cpu_times', 'io_counters', 'memory_info', 'num_fds'])
         if ARGS.diskstats:
             diskstats2 = psutil.disk_io_counters(perdisk=True)
 
@@ -616,7 +615,11 @@ def generate_samples(pid):
 
         # Build CPU utilization values (average CPU utilization within the past
         # sampling interval).
-        cputimes2 = datadict['cpu_times']
+        cputimes1 = procstats1['cpu_times']
+        cputimes2 = procstats2['cpu_times']
+        proc_io1 = procstats1['io_counters']
+        proc_io2 = procstats2['io_counters']
+
         delta_t = t_rel2 - t_rel1
         _delta_cputimes_user = cputimes2.user - cputimes1.user
         _delta_cputimes_system = cputimes2.system - cputimes1.system
@@ -625,11 +628,15 @@ def generate_samples(pid):
         proc_util_percent_user = 100 * _delta_cputimes_user / delta_t
         proc_util_percent_system = 100 * _delta_cputimes_system / delta_t
 
-        proc_io = datadict['io_counters']
-        proc_mem = datadict['memory_info']
-        proc_num_fds = datadict['num_fds']
+        proc_mem = procstats2['memory_info']
+        proc_num_fds = procstats2['num_fds']
 
+        # Calculate disk I/O statistics
         disksampledict = calc_diskstats(delta_t, diskstats1, diskstats2)
+
+        # Calculate I/O statistics for the process.
+        proc_io_read_rate_bps = (proc_io2.read_chars - proc_io1.read_chars) / delta_t
+        proc_io_write_rate_bps = (proc_io2.write_chars - proc_io1.write_chars) / delta_t
 
         # Order matters, but only for the CSV output in the sample writer.
         sampledict = OrderedDict((
@@ -651,8 +658,8 @@ def generate_samples(pid):
             ('proc_util_percent_total', proc_util_percent_total),
             ('proc_util_percent_user', proc_util_percent_user),
             ('proc_util_percent_system', proc_util_percent_system),
-            ('proc_io_read_chars', proc_io.read_chars),
-            ('proc_io_write_chars', proc_io.write_chars),
+            ('proc_io_read_rate_bps', proc_io_read_rate_bps),
+            ('proc_io_write_rate_bps', proc_io_write_rate_bps),
             ('proc_mem_rss', proc_mem.rss),
             ('proc_mem_vms', proc_mem.vms),
             ('proc_mem_dirty', proc_mem.dirty),
@@ -665,7 +672,8 @@ def generate_samples(pid):
 
         # For differential values, store 'new values' as 'old values' for next
         # iteration.
-        cputimes1 = cputimes2
+        procstats1 = procstats2
+        #cputimes1 = cputimes2
         diskstats1 = diskstats2
         t_rel1 = t_rel2
 
