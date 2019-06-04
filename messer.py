@@ -95,9 +95,11 @@ References for interpreting output:
   Disk statistics:
 
     - https://unix.stackexchange.com/a/462732 (What are merged writes?)
+    - https://www.xaprb.com/blog/2010/01/09/how-linux-iostat-computes-its-results/
     - https://blog.serverfault.com/2010/07/06/777852755/ (interpreting iostat output)
     - https://stackoverflow.com/a/8512978 (what is %util in iostat?)
     - https://coderwall.com/p/utc42q/understanding-iostat
+    - https://www.percona.com/doc/percona-toolkit/LATEST/pt-diskstats.html
 
 Other notes:
 
@@ -698,30 +700,49 @@ def calc_diskstats(delta_t, s1, s2):
         sampledict['disk_' + dev + '_util_percent'] = \
             (s2[dev].busy_time - s1[dev].busy_time) / (delta_t * 10)
 
-        # Attempt to implement iostat's `w_await` which is documented with "The
-        # average time (in  milliseconds)  for  write  requests issued to the
-        # device to be served. This includes the time spent by the requests in
-        # queue and the time spent servicing them. Use `write_time` which is
-        # documented with "time spent writing to disk (in milliseconds)" and
-        # `write_merged_count` which is documented with 'number of merged writes
-        # (see iostats doc)".'
-        # TODO(JP): explore setting Not A Number, NaN, because that's
-        # so much more correct than setting 0.
-        delta_mergedwrite_count = s2[dev].write_merged_count - s1[dev].write_merged_count
-        if delta_mergedwrite_count == 0:
-            avg_write_latency = 0
+        # TODO(JP): explore setting Not A Number, NaN, because that's so much
+        # more correct than setting 0.
+
+        # Implement iostat's `w_await` which is documented with "The average
+        # time (in  milliseconds)  for  write requests issued to the device to
+        # be served. This includes the time spent by the requests in queue and
+        # the time spent servicing them".
+        #
+        # Also see https://www.kernel.org/doc/Documentation/iostats.txt
+        #
+        # Use psutil's `write_time` which is documented with "time spent writing
+        # to disk (in milliseconds)", extracted from field 8 in /proc/diskstats,
+        # see. And use psutil's `write_count` which is extracted from field 5 in
+        # /proc/diststats. Notably, it is *not* the merged write count, but the
+        # user space write count. Which seems to be what iostat uses for
+        # calculating w_await.
+        #
+        # In an experiment I have seen that the following can happen within a
+        # second of real time: (observed via `iostat -x 1 | grep xvdh` and via
+        # direct observation of /proc/diststats): 3093.00 userspace write
+        # requests served, merged into 22.00 device write requests, yielding a
+        # total of 120914 milliseconds "spent writing", resulting in an
+        # "average" write latency of 25 milliseconds. But what do the 25
+        # milliseconds really mean here? On average, humans have less than two
+        # legs ...
+        #
+        # Well, for now, I am happy that the current implementation method
+        # re-creates the iostat output, which is the goal.
+        delta_write_count = s2[dev].write_count - s1[dev].write_count
+        if delta_write_count == 0:
+            avg_write_latency_ms = 0
         else:
-            avg_write_latency = (s2[dev].write_time - s1[dev].write_time) / delta_mergedwrite_count
-        sampledict['disk_' + dev + '_write_latency_ms'] = avg_write_latency
+            avg_write_latency_ms = (s2[dev].write_time - s1[dev].write_time) / delta_write_count
+        sampledict['disk_' + dev + '_write_latency_ms'] = avg_write_latency_ms
 
         # The same as above for r_await.
         # TODO(JP): explore setting NaN, for HDF5.
-        delta_mergedread_count = s2[dev].read_merged_count - s1[dev].read_merged_count
-        if delta_mergedread_count == 0:
-            avg_read_latency = 0
+        delta_read_count = s2[dev].read_count - s1[dev].read_count
+        if delta_read_count == 0:
+            avg_read_latency_ms = 0
         else:
-            avg_read_latency = (s2[dev].read_time - s1[dev].read_time) / delta_mergedread_count
-        sampledict['disk_' + dev + '_read_latency_ms'] = avg_read_latency
+            avg_read_latency_ms = (s2[dev].read_time - s1[dev].read_time) / delta_read_count
+        sampledict['disk_' + dev + '_read_latency_ms'] = avg_read_latency_ms
 
         # ## IO request rate, merged by kernel (what the device sees).
         #
@@ -731,15 +752,15 @@ def calc_diskstats(delta_t, s1, s2):
         # hardware). For non-random I/O patterns this greatly reduces the of
         # individual reads and writes issed to disk.
         sampledict['disk_' + dev + '_merged_write_rate_hz'] = \
-            delta_mergedwrite_count / delta_t
+            (s2[dev].write_merged_count - s1[dev].write_merged_count) / delta_t
         sampledict['disk_' + dev + '_merged_read_rate_hz'] = \
-            delta_mergedread_count / delta_t
+            (s2[dev].read_merged_count - s1[dev].read_merged_count) / delta_t
 
         # ## IO request rate emitted by user space.
         sampledict['disk_' + dev + '_userspace_write_rate_hz'] = \
-            (s2[dev].write_count - s1[dev].write_count) / delta_t
+            delta_write_count / delta_t
         sampledict['disk_' + dev + '_userspace_read_rate_hz'] = \
-            (s2[dev].read_count - s1[dev].read_count) / delta_t
+            delta_read_count / delta_t
 
     return sampledict
 
