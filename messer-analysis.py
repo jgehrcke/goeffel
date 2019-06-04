@@ -54,6 +54,10 @@ def main():
     )
 
     # TODO(JP): add an option to dump the columns in the data file.
+    parser.add_argument(
+        '--inspect-hdf5-file',
+        metavar='PATH'
+    )
 
     parser.add_argument(
         '--series',
@@ -87,6 +91,24 @@ def main():
 
     global ARGS
     ARGS = parser.parse_args()
+
+    # TODO(JP): build this functionality out: print properly, integrate
+    # properly with argparse.
+    if ARGS.inspect_hdf5_file:
+        import tables
+        hdf5file = tables.open_file(ARGS.inspect_hdf5_file, 'r')
+        table = hdf5file.root.messer_timeseries
+        print(
+            table.attrs.invocation_time_unix,
+            table.attrs.invocation_time_local,
+            table.attrs.system_hostname,
+            table.attrs.messer_schema_version,
+            table.attrs.messer_pid_command
+        )
+        print(table)
+        print('Column names:\n%s' % ('\n'.join(c for c in table.colnames)))
+        hdf5file.close()
+        sys.exit(0)
 
     lazy_load_big_packages()
 
