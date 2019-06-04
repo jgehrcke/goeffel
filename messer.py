@@ -301,12 +301,14 @@ HDF5_SAMPLE_SCHEMA = {
     'proc_util_percent_total': tables.Float32Col(pos=15),
     'proc_util_percent_user': tables.Float32Col(pos=16),
     'proc_util_percent_system': tables.Float32Col(pos=17),
-    'proc_io_read_rate_bps': tables.Float32Col(pos=18),
-    'proc_io_write_rate_bps': tables.Float32Col(pos=19),
-    'proc_mem_rss': tables.UInt64Col(pos=20),
-    'proc_mem_vms': tables.UInt64Col(pos=21),
-    'proc_mem_dirty': tables.UInt32Col(pos=22),
-    'proc_num_fds': tables.UInt32Col(pos=23),
+    'proc_io_read_throughput_bps': tables.Float32Col(pos=18),
+    'proc_io_write_throughput_bps': tables.Float32Col(pos=19),
+    'proc_io_read_rate_hz': tables.Float32Col(pos=20),
+    'proc_io_write_rate_hz': tables.Float32Col(pos=21),
+    'proc_mem_rss': tables.UInt64Col(pos=22),
+    'proc_mem_vms': tables.UInt64Col(pos=23),
+    'proc_mem_dirty': tables.UInt32Col(pos=24),
+    'proc_num_fds': tables.UInt32Col(pos=25),
 }
 
 
@@ -639,8 +641,10 @@ def generate_samples(pid):
         disksampledict = calc_diskstats(delta_t, diskstats1, diskstats2)
 
         # Calculate I/O statistics for the process.
-        proc_io_read_rate_bps = (proc_io2.read_chars - proc_io1.read_chars) / delta_t
-        proc_io_write_rate_bps = (proc_io2.write_chars - proc_io1.write_chars) / delta_t
+        proc_io_read_throughput_bps = (proc_io2.read_chars - proc_io1.read_chars) / delta_t
+        proc_io_write_throughput_bps = (proc_io2.write_chars - proc_io1.write_chars) / delta_t
+        proc_io_read_rate_hz = (proc_io2.read_count - proc_io1.read_count) / delta_t
+        proc_io_write_rate_hz = (proc_io2.write_count - proc_io1.write_count) / delta_t
 
         # Order matters, but only for the CSV output in the sample writer.
         sampledict = OrderedDict((
@@ -662,8 +666,10 @@ def generate_samples(pid):
             ('proc_util_percent_total', proc_util_percent_total),
             ('proc_util_percent_user', proc_util_percent_user),
             ('proc_util_percent_system', proc_util_percent_system),
-            ('proc_io_read_rate_bps', proc_io_read_rate_bps),
-            ('proc_io_write_rate_bps', proc_io_write_rate_bps),
+            ('proc_io_read_throughput_bps', proc_io_read_throughput_bps),
+            ('proc_io_write_throughput_bps', proc_io_write_throughput_bps),
+            ('proc_io_read_rate_hz', proc_io_read_rate_hz),
+            ('proc_io_write_rate_hz', proc_io_write_rate_hz),
             ('proc_mem_rss', proc_mem.rss),
             ('proc_mem_vms', proc_mem.vms),
             ('proc_mem_dirty', proc_mem.dirty),
