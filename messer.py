@@ -92,7 +92,7 @@ https://github.com/uber-common/cpustat
 
 References for interpreting output:
 
-  Disk statistics:
+  Disk I/O statistics:
 
     - https://unix.stackexchange.com/a/462732 (What are merged writes?)
     - https://www.xaprb.com/blog/2010/01/09/how-linux-iostat-computes-its-results/
@@ -101,7 +101,11 @@ References for interpreting output:
     - https://coderwall.com/p/utc42q/understanding-iostat
     - https://www.percona.com/doc/percona-toolkit/LATEST/pt-diskstats.html
 
-Other notes:
+  System memory statistics:
+
+    - https://serverfault.com/a/85481/121951
+
+  Other notes:
 
     - For writing the HDF5 file we could use pandas' pd.HDFStore implementation.
       However, already requiring pytables for measurement is a pretty big
