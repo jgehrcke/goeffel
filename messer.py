@@ -712,9 +712,6 @@ def calc_diskstats(delta_t, s1, s2):
         sampledict['disk_' + dev + '_util_percent'] = \
             (s2[dev].busy_time - s1[dev].busy_time) / (delta_t * 10)
 
-        # TODO(JP): explore setting Not A Number, NaN, because that's so much
-        # more correct than setting 0.
-
         # Implement iostat's `w_await` which is documented with "The average
         # time (in  milliseconds)  for  write requests issued to the device to
         # be served. This includes the time spent by the requests in queue and
@@ -740,18 +737,22 @@ def calc_diskstats(delta_t, s1, s2):
         #
         # Well, for now, I am happy that the current implementation method
         # re-creates the iostat output, which is the goal.
+        #
+        # About the case where there were no reads or writes during the sampling
+        # interval: emitting a latency of '0' is misleading. It's common to
+        # store a NaN/Null/None in that case, but that's not easily supported by
+        # the HDF5 file format. Instead, store -1, with the convention that this
+        # value means precisely "no writes/reads happened here.
         delta_write_count = s2[dev].write_count - s1[dev].write_count
         if delta_write_count == 0:
-            avg_write_latency_ms = 0
+            avg_write_latency_ms = -1
         else:
             avg_write_latency_ms = (s2[dev].write_time - s1[dev].write_time) / delta_write_count
         sampledict['disk_' + dev + '_write_latency_ms'] = avg_write_latency_ms
 
-        # The same as above for r_await.
-        # TODO(JP): explore setting NaN, for HDF5.
         delta_read_count = s2[dev].read_count - s1[dev].read_count
         if delta_read_count == 0:
-            avg_read_latency_ms = 0
+            avg_read_latency_ms = -1
         else:
             avg_read_latency_ms = (s2[dev].read_time - s1[dev].read_time) / delta_read_count
         sampledict['disk_' + dev + '_read_latency_ms'] = avg_read_latency_ms
