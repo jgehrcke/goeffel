@@ -291,7 +291,11 @@ def plot_subplot(ax, column_dict, series, plotsettings):
     ax.set_xlabel('Time (UTC)', fontsize=12)
 
     if plotsettings['show_y_label']:
-        ax.set_ylabel(column_dict['y_label'], fontsize=12)
+        # If no custom y label was provided fall back to using series name.
+        ax.set_ylabel(
+            column_dict['y_label'] if column_dict['y_label'] else series.name,
+            fontsize=12
+        )
 
     # The legend story is shitty with pandas intertwined w/ mpl.
     # http://stackoverflow.com/a/30666612/145400
