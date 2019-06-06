@@ -193,6 +193,7 @@ def plot_column_multiple_subplots(dataframe_label_pairs, column_dict):
     # hidden except at the bottom). From the "Creating adjacent subplots" demo
     # in the mpl docs. `subplots()` returns a list of Axes objects. Each Axes
     # object can later be `.plot()`ted on.
+
     axs = fig.subplots(dataframe_count, 1, sharex=True)
 
     if dataframe_count == 1:
@@ -217,6 +218,21 @@ def plot_column_multiple_subplots(dataframe_label_pairs, column_dict):
             maxval_across_series + 0.09 * diff
         )
 
+    # Note(JP): with the `sharex` behavior above it seems like the order of
+    # subplots created determines the xlimits set for _all_ subplots. That is,
+    # for example, if the last subplot shows a time series that is shorter than
+    # the previous subplots then this takes precedence and the other time series
+    # are shown only partially. Make sure that all data is shown! Find smallest
+    # and biggest timestamps across all series and use those values as x limit,
+    # for all plots, making sure that all data is shown.
+    mintime_across_series = min(df.index[0] for df, _ in dataframe_label_pairs)
+    maxtime_across_series = max(df.index[-1] for df, _ in dataframe_label_pairs)
+    diff = maxtime_across_series - mintime_across_series
+    common_x_limit = (
+        mintime_across_series - 0.03 * diff,
+        maxtime_across_series + 0.03 * diff
+    )
+
     # Plot individual subplots.
     for idx, (dataframe, series_label) in enumerate(dataframe_label_pairs, 1):
 
@@ -231,6 +247,8 @@ def plot_column_multiple_subplots(dataframe_label_pairs, column_dict):
         # Show legend only in first row (by default, can be modified)
         plotsettings['show_legend'] = True if idx == ARGS.show_legend_in_plot else False
         plotsettings['series_label'] = series_label
+
+        plotsettings['xlim'] = common_x_limit
 
         if common_y_limit is not None:
             plotsettings['ylim'] = common_y_limit
@@ -327,6 +345,8 @@ def plot_subplot(ax, column_dict, series, plotsettings):
             numpoints=4,
             loc=ARGS.legend_loc if ARGS.legend_loc else 'best'
         )
+
+    ax.set_xlim(plotsettings['xlim'])
 
     if 'ylim' in plotsettings:
 
