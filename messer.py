@@ -158,7 +158,7 @@ CSV_COLUMN_HEADER_WRITTEN = False
 
 # For choosing compression parameters, interoperability and reliability
 # (reducing risk for corruption) matters more than throughput.
-HDF5_COMP_FILTER = tables.Filters(complevel=5, complib='zlib', fletcher32=True)
+HDF5_COMP_FILTER = tables.Filters(complevel=9, complib='zlib', fletcher32=True)
 
 
 def main():
@@ -401,8 +401,11 @@ def sample_writer_process(queue):
     prepare_hdf5_file(ARGS.outfile_hdf5)
     prepare_csv_file(ARGS.outfile_csv)
 
+    hdf5_sample_buffer = []
+
     while True:
         sample = queue.get()
+        t_after_get = time.monotonic()
 
         # `sample` is expected to be an n-tuple or None. Shut down worker
         # process in case of `None`.
@@ -410,26 +413,32 @@ def sample_writer_process(queue):
             log.debug('Sample writer process: shutting down')
             break
 
-        t_before_flush = time.monotonic()
+
         # Simulate I/O slowness.
         # import random
         # time.sleep(random.randint(1, 10) / 30.0)
 
-        _write_sample_hdf5(sample, ARGS.outfile_hdf5)
         _write_sample_csv(sample, ARGS.outfile_csv)
 
-        sample_write_latency = time.monotonic() - t_before_flush
-        log.debug('Wrote sample to file(s) within %.6f s', sample_write_latency)
+        # Write N samples to disk together. It's fine to potentially lose a
+        # couple of seconds of time series data.
+        if len(hdf5_sample_buffer) == 20:
+            _write_samples_hdf5(hdf5_sample_buffer, ARGS.outfile_hdf5)
+            hdf5_sample_buffer = []
+        else:
+            hdf5_sample_buffer.append(sample)
+
+        log.debug('Consumer iteration: %.6f s', time.monotonic() - t_after_get)
 
 
-def _write_sample_hdf5(sample, filepath):
+def _write_samples_hdf5(samples, filepath):
     """
     For writing every sample go through the complete life cycle from open()ing
     the file to close()ing the file to minimize the risk for data corruption. If
     doing this once per SAMPLE_INTERVAL_SECONDS generates too much overhead a
     proper solution would be to write more than one sample (row) in one go.
     """
-
+    t0 = time.monotonic()
     with tables.open_file(filepath, 'a', filters=HDF5_COMP_FILTER) as f:
         # Look up table based on well-known name.
         hdf5table = f.root.messer_timeseries
@@ -439,16 +448,17 @@ def _write_sample_hdf5(sample, filepath):
         # write data simply by assigning the Row instance the values for each row as
         # if it were a dictionary (although it is actually an extension class),
         # using the column names as keys".
-
-        for key, value in sample.items():
-            hdf5table.row[key] = value
-
-        hdf5table.row.append()
+        for sample in samples:
+            for key, value in sample.items():
+                hdf5table.row[key] = value
+            hdf5table.row.append()
 
         # Leaving the context means flushing the table I/O buffer, updating all
         # meta data in the HDF file, and closing the file both logically from a
         # HDF5 perspective, but also from the kernel's / file system's
         # perspective.
+
+    log.debug('Updated HDF5 file (took %.5f s)', time.monotonic() - t0)
 
 
 def _write_sample_csv(sample, filepath):
