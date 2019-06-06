@@ -246,6 +246,13 @@ def main():
         help='Use that if full control over HDF5 file path is required.'
     )
 
+    parser.add_argument(
+        '--no-system-metrics',
+        action='store_true',
+        default=False,
+        help='Do not record system-global metrics (for a small reduction of the output data rate).'
+    )
+
     global ARGS
     ARGS = parser.parse_args()
 
@@ -259,13 +266,30 @@ def main():
     # Do more custom argument processing.
     process_diskstats_args()
 
+    if not ARGS.no_system_metrics:
+
+        for cn in ('system_loadavg1', 'system_loadavg5','system_loadavg15'):
+            hdf5_schema_add_column(colname=cn, coltype=tables.Float16Col)
+
+        for cn in (
+                'system_mem_available',
+                'system_mem_total',
+                'system_mem_used',
+                'system_mem_free',
+                'system_mem_shared',
+                'system_mem_buffers',
+                'system_mem_cached',
+                'system_mem_active',
+                'system_mem_inactive'):
+            hdf5_schema_add_column(colname=cn, coltype=tables.UInt64Col)
+
     # Set up the infrastructure for decoupling measurement (sample collection)
     # from persisting the data.
     samplequeue = multiprocessing.Queue()
 
     log.info(
-        'Collect time series for the folling metrics: \n%s',
-        '\n'.join(k for k in HDF5_SAMPLE_SCHEMA.keys()))
+        'Collect time series for the folling metrics: \n  %s',
+        '\n  '.join(k for k in HDF5_SAMPLE_SCHEMA.keys()))
 
     samplewriter = multiprocessing.Process(
         target=sample_writer_process,
@@ -363,33 +387,19 @@ HDF5_SAMPLE_SCHEMA = {
     'unixtime': tables.Time64Col(pos=0),
     'isotime_local': tables.StringCol(26, pos=1),
 
-    # System-wide metrics.
-    'system_loadavg1': tables.Float16Col(pos=2),
-    'system_loadavg5': tables.Float16Col(pos=3),
-    'system_loadavg15': tables.Float16Col(pos=4),
-    'system_mem_available': tables.UInt64Col(pos=5),
-    'system_mem_total': tables.UInt64Col(pos=6),
-    'system_mem_used': tables.UInt64Col(pos=7),
-    'system_mem_free': tables.UInt64Col(pos=8),
-    'system_mem_shared': tables.UInt64Col(pos=9),
-    'system_mem_buffers': tables.UInt64Col(pos=10),
-    'system_mem_cached': tables.UInt64Col(pos=11),
-    'system_mem_active': tables.UInt64Col(pos=12),
-    'system_mem_inactive': tables.UInt64Col(pos=13),
-
     # Process-specific metrics.
-    'proc_pid': tables.Int32Col(pos=14),
-    'proc_util_percent_total': tables.Float32Col(pos=15),
-    'proc_util_percent_user': tables.Float32Col(pos=16),
-    'proc_util_percent_system': tables.Float32Col(pos=17),
-    'proc_io_read_throughput_mibps': tables.Float32Col(pos=18),
-    'proc_io_write_throughput_mibps': tables.Float32Col(pos=19),
-    'proc_io_read_rate_hz': tables.Float32Col(pos=20),
-    'proc_io_write_rate_hz': tables.Float32Col(pos=21),
-    'proc_mem_rss': tables.UInt64Col(pos=22),
-    'proc_mem_vms': tables.UInt64Col(pos=23),
-    'proc_mem_dirty': tables.UInt32Col(pos=24),
-    'proc_num_fds': tables.UInt32Col(pos=25),
+    'proc_pid': tables.Int32Col(pos=3),
+    'proc_util_percent_total': tables.Float32Col(pos=4),
+    'proc_util_percent_user': tables.Float32Col(pos=5),
+    'proc_util_percent_system': tables.Float32Col(pos=6),
+    'proc_io_read_throughput_mibps': tables.Float32Col(pos=7),
+    'proc_io_write_throughput_mibps': tables.Float32Col(pos=8),
+    'proc_io_read_rate_hz': tables.Float32Col(pos=9),
+    'proc_io_write_rate_hz': tables.Float32Col(pos=10),
+    'proc_mem_rss': tables.UInt64Col(pos=11),
+    'proc_mem_vms': tables.UInt64Col(pos=12),
+    'proc_mem_dirty': tables.UInt32Col(pos=13),
+    'proc_num_fds': tables.UInt32Col(pos=14),
 }
 
 
@@ -477,6 +487,8 @@ def sample_writer_process(queue):
 
     hdf5_sample_buffer = []
 
+    first_sample_written = False
+
     while True:
         sample = queue.get()
         t_after_get = time.monotonic()
@@ -493,9 +505,15 @@ def sample_writer_process(queue):
 
         _write_sample_csv_if_enabled(sample)
 
-        # Write N samples to disk together. It's fine to potentially lose a
-        # couple of seconds of time series data.
-        if len(hdf5_sample_buffer) == 20:
+        # Write N samples to disk together (it's fine to potentially lose a
+        # couple of seconds of time series data). Also write very first sample
+        # immediately so that writing the HDF5 file fails fast (if it fails...
+        # , instead of failing only after collecting the first N samples).
+
+        if not first_sample_written:
+            _write_samples_hdf5_if_enabled([sample])
+            first_sample_written = True
+        elif len(hdf5_sample_buffer) == 20:
             _write_samples_hdf5_if_enabled(hdf5_sample_buffer)
             hdf5_sample_buffer = []
         else:
@@ -763,18 +781,6 @@ def generate_samples(pid):
         sampledict = OrderedDict((
             ('unixtime', time_sample_timestamp),
             ('isotime_local', time_sample_isostring_local),
-            ('system_loadavg1', loadavg[0]),
-            ('system_loadavg5', loadavg[1]),
-            ('system_loadavg15', loadavg[2]),
-            ('system_mem_available', system_mem.available),
-            ('system_mem_total', system_mem.total),
-            ('system_mem_used', system_mem.used),
-            ('system_mem_free', system_mem.free),
-            ('system_mem_shared', system_mem.shared),
-            ('system_mem_buffers', system_mem.buffers),
-            ('system_mem_cached', system_mem.cached),
-            ('system_mem_active', system_mem.active),
-            ('system_mem_inactive', system_mem.inactive),
             ('proc_pid', pid),
             ('proc_util_percent_total', proc_util_percent_total),
             ('proc_util_percent_user', proc_util_percent_user),
@@ -789,9 +795,24 @@ def generate_samples(pid):
             ('proc_num_fds', proc_num_fds),
         ))
 
+        if not ARGS.no_system_metrics:
+            sampledict.update(OrderedDict((
+                ('system_loadavg1', loadavg[0]),
+                ('system_loadavg5', loadavg[1]),
+                ('system_loadavg15', loadavg[2]),
+                ('system_mem_available', system_mem.available),
+                ('system_mem_total', system_mem.total),
+                ('system_mem_used', system_mem.used),
+                ('system_mem_free', system_mem.free),
+                ('system_mem_shared', system_mem.shared),
+                ('system_mem_buffers', system_mem.buffers),
+                ('system_mem_cached', system_mem.cached),
+                ('system_mem_active', system_mem.active),
+                ('system_mem_inactive', system_mem.inactive),
+            )))
+
         # Add disk sample data to sample dict.
-        for k, v in disksampledict.items():
-            sampledict[k] = v
+        sampledict.update(disksampledict)
 
         # For differential values, store 'new values' as 'old values' for next
         # iteration.
