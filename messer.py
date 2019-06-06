@@ -49,6 +49,7 @@ import sys
 import time
 import os
 import platform
+import signal
 import subprocess
 import multiprocessing
 
@@ -153,6 +154,13 @@ MESSER_SAMPLE_SCHEMA_VERSION = 1
 ARGS = None
 
 
+CSV_COLUMN_HEADER_WRITTEN = False
+
+# For choosing compression parameters, interoperability and reliability
+# (reducing risk for corruption) matters more than throughput.
+HDF5_COMP_FILTER = tables.Filters(complevel=5, complib='zlib', fletcher32=True)
+
+
 def main():
 
     parser = argparse.ArgumentParser(
@@ -166,9 +174,6 @@ def main():
 
     # Note(JP): build a mode where disk IO stats are collected for all disks?
 
-    # Note(JP): build in a concept that allows for "running this permanently",
-    # by building a retention policy, rotating HDF5 files (and deleting old
-    # ones), or something along these lines.
 
     # TODO(JP): measure performance impact of messer with another instance of
     # messer.
@@ -321,6 +326,58 @@ def hdf5_schema_add_column(colname, coltype):
     HDF5_SAMPLE_SCHEMA[colname] = coltype(pos=colpos)
 
 
+def prepare_hdf5_file(filepath):
+    # Do not use HDF5 groups. Write a single table per file, with a
+    # well-known table name so that the analysis program can discover.
+    # Note(JP): investicate chunk size, and generally explore providing an
+    # expected row count. For example, with a 1 Hz sampling rate aboout 2.5
+    # million rows are collected within 30 days:
+    # >>> 24 * 60 * 60 * 30
+    # 2592000
+
+    # TODO(JP): error out if file exists. At least warn.
+
+    log.info('Create HDF5 file: %s', ARGS.outfile_hdf5)
+
+    hdf5file = tables.open_file(
+        ARGS.outfile_hdf5,
+        mode='w',
+        title='messer.py time series file, invocation at ' + INVOCATION_TIME_LOCAL_STRING,
+        filters=HDF5_COMP_FILTER
+    )
+    hdf5table = hdf5file.create_table(
+        where='/',
+        name='messer_timeseries',
+        description=HDF5_SAMPLE_SCHEMA,
+        title='messer.py time series, invocation at ' + INVOCATION_TIME_LOCAL_STRING,
+    )
+
+    # Use so-called HDF5 table user attributes for storing relevant metadata.
+    hdf5table.attrs.invocation_time_unix = INVOCATION_TIME_UNIX_TIMESTAMP
+    hdf5table.attrs.invocation_time_local = INVOCATION_TIME_LOCAL_STRING
+    hdf5table.attrs.system_hostname = get_hostname()
+    hdf5table.attrs.messer_schema_version = MESSER_SAMPLE_SCHEMA_VERSION
+    # Store both, pid and pid command although we know only one is populated.
+    hdf5table.attrs.messer_pid_command = ARGS.pid_command
+    hdf5table.attrs.messer_pid = ARGS.pid
+    hdf5table.attrs.messer_sampling_interval_seconds = SAMPLE_INTERVAL_SECONDS
+    hdf5file.close()
+
+
+def prepare_csv_file(filepath):
+    if not filepath:
+        return
+
+    # TODO(JP): error out if file exists.
+
+    log.info('Create CSV file: %s', ARGS.outfile_csv)
+    with open(filepath, 'wb') as f:
+        f.write(b'# messer_timeseries\n')
+        f.write(b'# %s\n' (INVOCATION_TIME_LOCAL_STRING, ))
+        f.write(b'# system hostname: %s\n' (get_hostname(), ))
+        f.write(b'# schema version: %s\n' (MESSER_SAMPLE_SCHEMA_VERSION, ))
+
+
 def sample_writer_process(queue):
     """
     This is being run in a child process. The parent and the child are connected
@@ -340,71 +397,9 @@ def sample_writer_process(queue):
     the data through a Queue-based buffer (in the parent process) between both
     processes.
     """
-
-    import signal
     signal.signal(signal.SIGINT, signal.SIG_IGN)
-
-    try:
-        hostname = platform.node()
-    except Exception as e:
-        log.info('Cannot get system hostname: %s', e)
-        hostname = ''
-
-    log.info('Create HDF5 file: %s', ARGS.outfile_hdf5)
-
-    # For choosing compression parameters, interoperability and reliability
-    # (reducing risk for corruption) matters more than throughput.
-    hdf5_compression_filter = tables.Filters(
-        complevel=5, complib='zlib', fletcher32=True)
-
-    hdf5file = tables.open_file(
-        ARGS.outfile_hdf5,
-        mode='w',
-        title='messer.py time series file, invocation at ' + INVOCATION_TIME_LOCAL_STRING,
-        filters=hdf5_compression_filter
-    )
-
-    csvfile = None
-    csv_column_header_written = False
-    if ARGS.outfile_csv:
-        log.info('Create CSV file: %s', ARGS.outfile_csv)
-        csvfile = open(ARGS.outfile_csv, 'wb')
-        csvfile.write(b'# messer_timeseries\n')
-        csvfile.write(b'# %s\n' (INVOCATION_TIME_LOCAL_STRING, ))
-        csvfile.write(b'# system hostname: %s\n' (hostname, ))
-        csvfile.write(b'# schema version: %s\n' (MESSER_SAMPLE_SCHEMA_VERSION, ))
-
-    # Do not use HDF5 groups. Write a single table per file, with a well-known
-    # table name so that the analysis program can discover.
-    # Note(JP): investicate chunk size, and generally explore providing an
-    # expected row count. For example, with a 1 Hz sampling rate aboout 2.5 million
-    # rows are collected within 30 days:
-    # >>> 24 * 60 * 60 * 30
-    # 2592000
-    #
-    hdf5table = hdf5file.create_table(
-        where='/',
-        name='messer_timeseries',
-        description=HDF5_SAMPLE_SCHEMA,
-        title='messer.py time series, invocation at ' + INVOCATION_TIME_LOCAL_STRING,
-    )
-
-    # Use so-called HDF5 table user attributes for storing relevant metadata.
-    hdf5table.attrs.invocation_time_unix = INVOCATION_TIME_UNIX_TIMESTAMP
-    hdf5table.attrs.invocation_time_local = INVOCATION_TIME_LOCAL_STRING
-    hdf5table.attrs.system_hostname = get_hostname()
-    hdf5table.attrs.messer_schema_version = MESSER_SAMPLE_SCHEMA_VERSION
-    # Store both, pid and pid command although we know only one is populated.
-    hdf5table.attrs.messer_pid_command = ARGS.pid_command
-    hdf5table.attrs.messer_pid = ARGS.pid
-    hdf5table.attrs.messer_sampling_interval_seconds = SAMPLE_INTERVAL_SECONDS
-
-
-    # The pytables way of doing things: "The row attribute of table points to
-    # the Row instance that will be used to write data rows into the table. We
-    # write data simply by assigning the Row instance the values for each row as
-    # if it were a dictionary (although it is actually an extension class),
-    # using the column names as keys".
+    prepare_hdf5_file(ARGS.outfile_hdf5)
+    prepare_csv_file(ARGS.outfile_csv)
 
     while True:
         sample = queue.get()
@@ -415,39 +410,51 @@ def sample_writer_process(queue):
             log.debug('Sample writer process: shutting down')
             break
 
-        time_before_flush = time.monotonic()
-
+        t_before_flush = time.monotonic()
         # Simulate I/O slowness.
         # import random
         # time.sleep(random.randint(1, 10) / 30.0)
 
-        _write_sample_hdf5(sample, hdf5table)
+        _write_sample_hdf5(sample, ARGS.outfile_hdf5)
+        _write_sample_csv(sample, ARGS.outfile_csv)
 
-        # Note(JP): how can we make it so that after this line the HDF5 file is
-        # *valid* and can be opened by other tooling? 'NoneType' object has no
-        # attribute 'get_node'
-        # 2019-05-28 18:27:57,355 - vitables.h5db.dbstreemodel - ERROR - Opening cancelled: file /home/jp/dev/messer/messer_timeseries_20190528_182722.hdf5 already open.
-        _write_sample_csv(sample, csvfile)
-
-        sample_write_latency = time.monotonic() - time_before_flush
-
+        sample_write_latency = time.monotonic() - t_before_flush
         log.debug('Wrote sample to file(s) within %.6f s', sample_write_latency)
 
 
-def _write_sample_hdf5(sample,  hdf5table):
+def _write_sample_hdf5(sample, filepath):
+    """
+    For writing every sample go through the complete life cycle from open()ing
+    the file to close()ing the file to minimize the risk for data corruption. If
+    doing this once per SAMPLE_INTERVAL_SECONDS generates too much overhead a
+    proper solution would be to write more than one sample (row) in one go.
+    """
+
+    with tables.open_file(filepath, 'a', filters=HDF5_COMP_FILTER) as f:
+        # Look up table based on well-known name.
+        hdf5table = f.root.messer_timeseries
+
+        # The pytables way of doing things: "The row attribute of table points to
+        # the Row instance that will be used to write data rows into the table. We
+        # write data simply by assigning the Row instance the values for each row as
+        # if it were a dictionary (although it is actually an extension class),
+        # using the column names as keys".
 
         for key, value in sample.items():
             hdf5table.row[key] = value
 
-        # Write sample to pytable's table I/O buffer. Then flush to disk (early
-        # and often -- with the small data output rate it's not expected that
-        # frequent flushing creates a bottleneck).
         hdf5table.row.append()
-        hdf5table.flush()
+
+        # Leaving the context means flushing the table I/O buffer, updating all
+        # meta data in the HDF file, and closing the file both logically from a
+        # HDF5 perspective, but also from the kernel's / file system's
+        # perspective.
 
 
-def _write_sample_csv(sample, csvfile):
-    if csvfile is not None:
+def _write_sample_csv(sample, filepath):
+    global CSV_COLUMN_HEADER_WRITTEN
+
+    if filepath is not None:
 
         samplevalues = tuple(v for k, v in sample.items())
 
@@ -460,16 +467,17 @@ def _write_sample_csv(sample, csvfile):
             '%d, %5.2f, %5.2f, %5.2f, %d, %d, %d, %d, %d, %d\n' % samplevalues
         )
 
-        # Write the column header to the CSV file if not yet done. Do that
-        # here so that the column names can be explicitly read from an
-        # (ordered) sample dicitionary.
-        if not csv_column_header_written:
-            csvfile.write(
-                ','.join(k for k in sample.keys()).encode('ascii') + b'\n')
-            csv_column_header_written = True
+        with open(csvfile, 'a') as f:
 
-        csvfile.write(csv_sample_row.encode('ascii'))
-        csvfile.flush()
+            # Write the column header to the CSV file if not yet done. Do that
+            # here so that the column names can be explicitly read from an
+            # (ordered) sample dicitionary.
+            if not CSV_COLUMN_HEADER_WRITTEN:
+                f.write(
+                    ','.join(k for k in sample.keys()).encode('ascii') + b'\n')
+                CSV_COLUMN_HEADER_WRITTEN = True
+
+            f.write(csv_sample_row.encode('ascii'))
 
 
 def mainloop(samplequeue, samplewriter):
