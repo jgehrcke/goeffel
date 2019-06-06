@@ -131,7 +131,7 @@ logging.basicConfig(
 # From the `cpustat` documentation: "Linux CPU time accounting is done in terms
 # of whole "clock ticks", which are often 100ms. This can cause some strange
 # values when sampling every 200ms.""
-SAMPLE_INTERVAL_SECONDS = 1.0
+SAMPLE_INTERVAL_SECONDS = 0.5
 
 
 PROCESS_PID_POLL_INTERVAL_SECONDS = 2.0
