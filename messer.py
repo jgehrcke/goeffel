@@ -156,8 +156,8 @@ ARGS = None
 CSV_COLUMN_HEADER_WRITTEN = False
 
 
-HDF5_OUTFILE_PATH = None
-CSV_OUTFILE_PATH = None
+OUTFILE_PATH_HDF5 = None
+OUTFILE_PATH_CSV = None
 
 
 # For choosing compression parameters, interoperability and reliability
@@ -290,8 +290,8 @@ def main():
 
 
 def process_outfile_args():
-    global HDF5_OUTFILE_PATH
-    global CSV_OUTFILE_PATH
+    global OUTFILE_PATH_HDF5
+    global OUTFILE_PATH_CSV
 
     # Determine path for HDF5 output file. `None` signals to not write one.
     if ARGS.no_hdf5:
@@ -309,15 +309,19 @@ def process_outfile_args():
     else:
         path_csv = ARGS.csv_path_prefix + INVOCATION_TIME_LOCAL_STRING + '.csv'
 
-    if path_hdf5 and os.path.exists(path_hdf5):
-        sys.exit(f'Error: path exists: {path_hdf5}')
+    if path_hdf5:
+        if os.path.exists(path_hdf5):
+            sys.exit(f'Error: path exists: {path_hdf5}')
+        log.info(f'Will write data file {path_hdf5}')
 
-    if path_csv and os.path.exists(path_csv):
-        sys.exit(f'Error: path exists: {path_csv}')
+    if path_csv:
+        if os.path.exists(path_csv):
+            sys.exit(f'Error: path exists: {path_csv}')
+        log.info(f'Will write data file {path_csv}')
 
     # Expose config to the rest of the program.
-    HDF5_OUTFILE_PATH = path_hdf5
-    CSV_OUTFILE_PATH = path_csv
+    OUTFILE_PATH_HDF5 = path_hdf5
+    OUTFILE_PATH_CSV = path_csv
 
 
 def process_diskstats_args():
@@ -395,9 +399,9 @@ def hdf5_schema_add_column(colname, coltype):
     HDF5_SAMPLE_SCHEMA[colname] = coltype(pos=colpos)
 
 
-def prepare_hdf5_file(filepath):
-    if filepath is None:
-        # Do not write an HSF5 output file.
+def _prepare_hdf5_file_if_not_yet_existing():
+
+    if os.path.exists(OUTFILE_PATH_HDF5):
         return
 
     # Do not use HDF5 groups. Write a single table per file, with a
@@ -410,10 +414,10 @@ def prepare_hdf5_file(filepath):
 
     # TODO(JP): error out if file exists. At least warn.
 
-    log.info('Create HDF5 file: %s', filepath)
+    log.info('Create HDF5 file: %s', OUTFILE_PATH_HDF5)
 
     hdf5file = tables.open_file(
-        filepath,
+        OUTFILE_PATH_HDF5,
         mode='w',
         title='messer.py time series file, invocation at ' + INVOCATION_TIME_LOCAL_STRING,
         filters=HDF5_COMP_FILTER
@@ -437,14 +441,12 @@ def prepare_hdf5_file(filepath):
     hdf5file.close()
 
 
-def prepare_csv_file(filepath):
-    if filepath is None:
-        # Do not write a CSV output file.
+def _prepare_csv_file_if_not_yet_existing():
+
+    if os.path.exists(OUTFILE_PATH_CSV):
         return
 
-    # TODO(JP): error out if file exists.
-
-    log.info('Create CSV file: %s', ARGS.outfile_csv)
+    log.info('Create CSV file: %s', OUTFILE_PATH_CSV)
     with open(filepath, 'wb') as f:
         f.write(b'# messer_timeseries\n')
         f.write(b'# %s\n' (INVOCATION_TIME_LOCAL_STRING, ))
@@ -472,8 +474,6 @@ def sample_writer_process(queue):
     processes.
     """
     signal.signal(signal.SIGINT, signal.SIG_IGN)
-    prepare_hdf5_file(HDF5_OUTFILE_PATH)
-    prepare_csv_file(CSV_OUTFILE_PATH)
 
     hdf5_sample_buffer = []
 
@@ -487,17 +487,16 @@ def sample_writer_process(queue):
             log.debug('Sample writer process: shutting down')
             break
 
-
         # Simulate I/O slowness.
         # import random
         # time.sleep(random.randint(1, 10) / 30.0)
 
-        _write_sample_csv(sample, ARGS.outfile_csv)
+        _write_sample_csv_if_enabled(sample)
 
         # Write N samples to disk together. It's fine to potentially lose a
         # couple of seconds of time series data.
         if len(hdf5_sample_buffer) == 20:
-            _write_samples_hdf5(hdf5_sample_buffer, ARGS.outfile_hdf5)
+            _write_samples_hdf5_if_enabled(hdf5_sample_buffer)
             hdf5_sample_buffer = []
         else:
             hdf5_sample_buffer.append(sample)
@@ -505,15 +504,22 @@ def sample_writer_process(queue):
         log.debug('Consumer iteration: %.6f s', time.monotonic() - t_after_get)
 
 
-def _write_samples_hdf5(samples, filepath):
+def _write_samples_hdf5_if_enabled(samples):
     """
     For writing every sample go through the complete life cycle from open()ing
     the file to close()ing the file to minimize the risk for data corruption. If
     doing this once per SAMPLE_INTERVAL_SECONDS generates too much overhead a
     proper solution would be to write more than one sample (row) in one go.
     """
+    if OUTFILE_PATH_HDF5 is None:
+        # That *is* the signal to not write an HDF5 output file.
+        return
+
     t0 = time.monotonic()
-    with tables.open_file(filepath, 'a', filters=HDF5_COMP_FILTER) as f:
+
+    _prepare_hdf5_file_if_not_yet_existing()
+
+    with tables.open_file(OUTFILE_PATH_HDF5, 'a', filters=HDF5_COMP_FILTER) as f:
         # Look up table based on well-known name.
         hdf5table = f.root.messer_timeseries
 
@@ -535,33 +541,37 @@ def _write_samples_hdf5(samples, filepath):
     log.debug('Updated HDF5 file (took %.5f s)', time.monotonic() - t0)
 
 
-def _write_sample_csv(sample, filepath):
+def _write_sample_csv_if_enabled(sample):
     global CSV_COLUMN_HEADER_WRITTEN
 
-    if filepath is not None:
+    if OUTFILE_PATH_CSV is None:
+        # That *is* the signal to not write a CSV output file.
+        return
 
-        samplevalues = tuple(v for k, v in sample.items())
+    _prepare_csv_file_if_not_yet_existing()
 
-        # Apply a bit of custom formatting.
-        # Note(JP): store these format strings closer to the column listing,
-        # and assemble a format string dynamically.
-        csv_sample_row = (
-            '%.6f, %s, %5.2f, %5.2f, %5.2f, '
-            '%d, %d, %d, %d, %d, %d, %d, %d, %d, '
-            '%d, %5.2f, %5.2f, %5.2f, %d, %d, %d, %d, %d, %d\n' % samplevalues
-        )
+    samplevalues = tuple(v for k, v in sample.items())
 
-        with open(csvfile, 'a') as f:
+    # Apply a bit of custom formatting.
+    # Note(JP): store these format strings closer to the column listing,
+    # and assemble a format string dynamically.
+    csv_sample_row = (
+        '%.6f, %s, %5.2f, %5.2f, %5.2f, '
+        '%d, %d, %d, %d, %d, %d, %d, %d, %d, '
+        '%d, %5.2f, %5.2f, %5.2f, %d, %d, %d, %d, %d, %d\n' % samplevalues
+    )
 
-            # Write the column header to the CSV file if not yet done. Do that
-            # here so that the column names can be explicitly read from an
-            # (ordered) sample dicitionary.
-            if not CSV_COLUMN_HEADER_WRITTEN:
-                f.write(
-                    ','.join(k for k in sample.keys()).encode('ascii') + b'\n')
-                CSV_COLUMN_HEADER_WRITTEN = True
+    with open(OUTFILE_PATH_CSV, 'a') as f:
 
-            f.write(csv_sample_row.encode('ascii'))
+        # Write the column header to the CSV file if not yet done. Do that
+        # here so that the column names can be explicitly read from an
+        # (ordered) sample dicitionary.
+        if not CSV_COLUMN_HEADER_WRITTEN:
+            f.write(
+                ','.join(k for k in sample.keys()).encode('ascii') + b'\n')
+            CSV_COLUMN_HEADER_WRITTEN = True
+
+        f.write(csv_sample_row.encode('ascii'))
 
 
 def mainloop(samplequeue, samplewriter):
