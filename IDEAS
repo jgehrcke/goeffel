@@ -1,0 +1,8 @@
+- Data emission: allow for emitting data into a metrics pipeline via network
+
+- HDF5 file management:  build in a concept that allows for "running this
+  permanently" while consuming predictable disk space. Something along the lines
+  of truncation, building a retention policy, or generally "file rotation).
+
+- File management in general: prevent accidental concurrent write access.
+  Simple: check if file exists. More complex: file locking.
