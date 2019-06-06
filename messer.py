@@ -389,7 +389,7 @@ def sample_writer_process(queue):
     # Use so-called HDF5 table user attributes for storing relevant metadata.
     hdf5table.attrs.invocation_time_unix = INVOCATION_TIME_UNIX_TIMESTAMP
     hdf5table.attrs.invocation_time_local = INVOCATION_TIME_LOCAL_STRING
-    hdf5table.attrs.system_hostname = hostname
+    hdf5table.attrs.system_hostname = get_hostname()
     hdf5table.attrs.messer_schema_version = MESSER_SAMPLE_SCHEMA_VERSION
     # Store both, pid and pid command although we know only one is populated.
     hdf5table.attrs.messer_pid_command = ARGS.pid_command
@@ -790,6 +790,14 @@ def calc_diskstats(delta_t, s1, s2):
             delta_read_count / delta_t
 
     return sampledict
+
+
+def get_hostname():
+    try:
+        hostname = platform.node()
+    except Exception as e:
+        log.info('Cannot get system hostname: %s', e)
+        hostname = ''
 
 
 def pid_from_cmd(pid_command):
