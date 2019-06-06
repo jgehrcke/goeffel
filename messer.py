@@ -131,7 +131,7 @@ logging.basicConfig(
 # From the `cpustat` documentation: "Linux CPU time accounting is done in terms
 # of whole "clock ticks", which are often 100ms. This can cause some strange
 # values when sampling every 200ms.""
-PROCESS_SAMPLE_INTERVAL_SECONDS = 1
+SAMPLE_INTERVAL_SECONDS = 1.0
 
 
 PROCESS_PID_POLL_INTERVAL_SECONDS = 2.0
@@ -394,7 +394,7 @@ def sample_writer_process(queue):
     # Store both, pid and pid command although we know only one is populated.
     hdf5table.attrs.messer_pid_command = ARGS.pid_command
     hdf5table.attrs.messer_pid = ARGS.pid
-    hdf5table.attrs.messer_sampling_interval_seconds = PROCESS_SAMPLE_INTERVAL_SECONDS
+    hdf5table.attrs.messer_sampling_interval_seconds = SAMPLE_INTERVAL_SECONDS
 
 
     # The pytables way of doing things: "The row attribute of table points to
@@ -561,7 +561,7 @@ def generate_samples(pid):
     if ARGS.diskstats:
         diskstats1 = psutil.disk_io_counters(perdisk=True)
 
-    time.sleep(PROCESS_SAMPLE_INTERVAL_SECONDS)
+    time.sleep(SAMPLE_INTERVAL_SECONDS)
 
     while True:
 
@@ -699,7 +699,7 @@ def generate_samples(pid):
         yield sampledict
 
         # Wait (approximately) for the configured sampling interval.
-        time.sleep(PROCESS_SAMPLE_INTERVAL_SECONDS)
+        time.sleep(SAMPLE_INTERVAL_SECONDS)
 
 
 def calc_diskstats(delta_t, s1, s2):
