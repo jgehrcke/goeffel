@@ -140,7 +140,6 @@ SAMPLE_INTERVAL_SECONDS = 0.5
 
 PROCESS_PID_POLL_INTERVAL_SECONDS = 2.0
 
-
 # Measure invocation time (is consumed in various places).
 INVOCATION_TIME_UNIX_TIMESTAMP = time.time()
 INVOCATION_TIME_LOCAL_STRING = datetime.fromtimestamp(
@@ -155,6 +154,11 @@ ARGS = None
 
 
 CSV_COLUMN_HEADER_WRITTEN = False
+
+
+HDF5_OUTFILE_PATH = None
+CSV_OUTFILE_PATH = None
+
 
 # For choosing compression parameters, interoperability and reliability
 # (reducing risk for corruption) matters more than throughput.
@@ -174,7 +178,6 @@ def main():
 
     # Note(JP): build a mode where disk IO stats are collected for all disks?
 
-
     # TODO(JP): measure performance impact of messer with another instance of
     # messer.
 
@@ -183,8 +186,14 @@ def main():
     what.add_argument(
         '--pid-command',
         metavar='\'PID COMMAND\'',
+        help='A shell command expected to return a single process ID on stdout.'
     )
-    what.add_argument('--pid', metavar='PROCESSID', type=int)
+    what.add_argument(
+        '--pid',
+        metavar='PROCESSID',
+        type=int,
+        help='A process ID.'
+    )
 
     # Collect ideas for more flexible configuration.
     # what.add_argument('--diskstats', action='store_true')
@@ -192,33 +201,62 @@ def main():
     parser.add_argument(
         '--diskstats',
         action='append',
-        metavar='DEVICENAME',
+        metavar='DEVNAME',
+        help='Measure disk I/O statistics for device DEVNAME.'
     )
 
     # TODO: make it so that at least one output file method is defined.
     # maybe: require HDF5 to work.
     # TODO: enable optional CSV output, in  addition.
     parser.add_argument(
-        '--outfile-hdf5',
+        '--hdf5-path-prefix',
+        metavar='PATH_PREFIX',
+        default='./messer_timeseries_',
+        help='Change the default HDF5 file path prefix. Suffix contains invocation time and file extension.'
+    )
+    parser.add_argument(
+        '--outfile-hdf5-path',
         metavar='PATH',
-        default='messer_timeseries_' + INVOCATION_TIME_LOCAL_STRING + '.hdf5',
+        default=None,
+        help='Use that if full control over HDF5 file path is required.'
+    )
+    parser.add_argument(
+        '--no-hdf5',
+        action='store_true',
+        default=False,
+        help='Disable writing to an HDF5 output file (default: enabled).'
     )
 
     parser.add_argument(
-        '--outfile-csv',
+        '--enable-csv',
+        action='store_true',
+        default=False,
+        help='Enable writing to a CSV output file (default: disabled).'
+    )
+    parser.add_argument(
+        '--csv-path-prefix',
+        metavar='PATH_PREFIX',
+        default='./messer_timeseries_',
+        help='Change the default CSV file path prefix. Suffix contains invocation time and file extension.'
+    )
+    parser.add_argument(
+        '--outfile-csv-path',
         metavar='PATH',
         default=None,
+        help='Use that if full control over HDF5 file path is required.'
     )
 
     global ARGS
     ARGS = parser.parse_args()
+
+    process_outfile_args()
 
     # Import here, delayed, instead of in the header (otherwise the command line
     # help / error reporting is noticeably slowed down).
     global psutil
     import psutil
 
-    # Do custom argument processing.
+    # Do more custom argument processing.
     process_diskstats_args()
 
     # Set up the infrastructure for decoupling measurement (sample collection)
@@ -249,6 +287,37 @@ def main():
         samplequeue.join_thread()
         samplewriter.join()
         log.debug('Sample writer process terminated')
+
+
+def process_outfile_args():
+    global HDF5_OUTFILE_PATH
+    global CSV_OUTFILE_PATH
+
+    # Determine path for HDF5 output file. `None` signals to not write one.
+    if ARGS.no_hdf5:
+        path_hdf5 = None
+    elif ARGS.outfile_hdf5_path:
+        path_hdf5 = ARGS.outfile_hdf5_path
+    else:
+        path_hdf5 = ARGS.hdf5_path_prefix + INVOCATION_TIME_LOCAL_STRING + '.hdf5'
+
+    # Determine path for CSV output file. `None` signals to not write one.
+    if not ARGS.enable_csv:
+        path_csv = None
+    elif ARGS.outfile_csv_path:
+        path_csv = ARGS.outfile_csv_path
+    else:
+        path_csv = ARGS.csv_path_prefix + INVOCATION_TIME_LOCAL_STRING + '.csv'
+
+    if path_hdf5 and os.path.exists(path_hdf5):
+        sys.exit(f'Error: path exists: {path_hdf5}')
+
+    if path_csv and os.path.exists(path_csv):
+        sys.exit(f'Error: path exists: {path_csv}')
+
+    # Expose config to the rest of the program.
+    HDF5_OUTFILE_PATH = path_hdf5
+    CSV_OUTFILE_PATH = path_csv
 
 
 def process_diskstats_args():
@@ -327,6 +396,10 @@ def hdf5_schema_add_column(colname, coltype):
 
 
 def prepare_hdf5_file(filepath):
+    if filepath is None:
+        # Do not write an HSF5 output file.
+        return
+
     # Do not use HDF5 groups. Write a single table per file, with a
     # well-known table name so that the analysis program can discover.
     # Note(JP): investicate chunk size, and generally explore providing an
@@ -337,10 +410,10 @@ def prepare_hdf5_file(filepath):
 
     # TODO(JP): error out if file exists. At least warn.
 
-    log.info('Create HDF5 file: %s', ARGS.outfile_hdf5)
+    log.info('Create HDF5 file: %s', filepath)
 
     hdf5file = tables.open_file(
-        ARGS.outfile_hdf5,
+        filepath,
         mode='w',
         title='messer.py time series file, invocation at ' + INVOCATION_TIME_LOCAL_STRING,
         filters=HDF5_COMP_FILTER
@@ -365,7 +438,8 @@ def prepare_hdf5_file(filepath):
 
 
 def prepare_csv_file(filepath):
-    if not filepath:
+    if filepath is None:
+        # Do not write a CSV output file.
         return
 
     # TODO(JP): error out if file exists.
@@ -398,8 +472,8 @@ def sample_writer_process(queue):
     processes.
     """
     signal.signal(signal.SIGINT, signal.SIG_IGN)
-    prepare_hdf5_file(ARGS.outfile_hdf5)
-    prepare_csv_file(ARGS.outfile_csv)
+    prepare_hdf5_file(HDF5_OUTFILE_PATH)
+    prepare_csv_file(CSV_OUTFILE_PATH)
 
     hdf5_sample_buffer = []
 
