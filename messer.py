@@ -149,7 +149,7 @@ INVOCATION_TIME_LOCAL_STRING = datetime.fromtimestamp(
 MESSER_SAMPLE_SCHEMA_VERSION = 1
 
 
-# Will be populated with options from command line arguments.
+# Will be populated by ArgumentParser, with options from the command line.
 ARGS = None
 
 
@@ -169,7 +169,7 @@ def main():
 
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description='A tool for measuring system resource utilization',
+        description='A tool for measuring process and system resource utilization.',
         epilog=textwrap.dedent(__doc__).strip()
     )
 
@@ -447,7 +447,7 @@ def _prepare_csv_file_if_not_yet_existing():
         return
 
     log.info('Create CSV file: %s', OUTFILE_PATH_CSV)
-    with open(filepath, 'wb') as f:
+    with open(OUTFILE_PATH_CSV, 'wb') as f:
         f.write(b'# messer_timeseries\n')
         f.write(b'# %s\n' (INVOCATION_TIME_LOCAL_STRING, ))
         f.write(b'# system hostname: %s\n' (get_hostname(), ))
@@ -903,7 +903,7 @@ def get_hostname():
     except Exception as e:
         log.info('Cannot get system hostname: %s', e)
         hostname = ''
-
+    return hostname
 
 def pid_from_cmd(pid_command):
     """
