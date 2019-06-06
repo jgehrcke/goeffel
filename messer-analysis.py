@@ -52,14 +52,19 @@ def main():
         description=description,
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
+    subparsers = parser.add_subparsers()
 
-    # TODO(JP): add an option to dump the columns in the data file.
-    parser.add_argument(
-        '--inspect-hdf5-file',
-        metavar='PATH'
+    isparser = subparsers.add_parser('inspect', help='Inspect data file')
+    isparser.add_argument(
+        'inspect_inputfile',
+        metavar='PATH',
+        help='Path to data file',
     )
 
-    parser.add_argument(
+    plotparser = subparsers.add_parser('plot', help='Plot data')
+
+
+    plotparser.add_argument(
         '--series',
         nargs=2,
         metavar=('DATAFILE_PATH', 'DATASET_LABEL'),
@@ -68,20 +73,30 @@ def main():
         help='Data file containing one or multiple time series (column(s))'
     )
 
-    parser.add_argument(
+    plotparser.add_argument(
         '--column',
         nargs=4,
         metavar=('COLUMN_NAME', 'Y_LABEL', 'PLOT_TITLE', 'ROLLING_WINDOW_WIDTH_SECONDS'),
         action='append',
-        required=True
+        required=True,
+        help='Every column is displayed in its own figure, potentially multiple sub plots from various columns'
     )
 
-    parser.add_argument('--subtitle', required=True)
-    parser.add_argument('--samescale', action='store_true', default=True)
-    parser.add_argument('--legend-loc')
-    parser.add_argument('--show-legend-in-plot', default=1, type=int)
-    parser.add_argument('--normalization-factor', default=0, type=float)
-    parser.add_argument(
+    plotparser.add_argument(
+        '--subtitle',
+        default='Default subtitle -- measured with messer.py',
+        help='Set plot subtitle'
+    )
+    plotparser.add_argument('--samescale', action='store_true', default=True)
+    plotparser.add_argument('--legend-loc')
+    plotparser.add_argument('--show-legend-in-plot', default=1, type=int)
+    plotparser.add_argument(
+        '--normalization-factor',
+        default=0,
+        type=float,
+        help='All values are divided by this number.'
+    )
+    plotparser.add_argument(
         '--custom-y-limit',
         nargs=2,
         type=float,
@@ -94,19 +109,23 @@ def main():
 
     # TODO(JP): build this functionality out: print properly, integrate
     # properly with argparse.
-    if ARGS.inspect_hdf5_file:
+    if hasattr(ARGS, 'inspect_inputfile'):
         import tables
-        hdf5file = tables.open_file(ARGS.inspect_hdf5_file, 'r')
+        hdf5file = tables.open_file(ARGS.inspect_inputfile, 'r')
+        print(f'File information:\n{hdf5file}')
+        # TODO(JP): handle case when table does not exist.
         table = hdf5file.root.messer_timeseries
         print(
-            table.attrs.invocation_time_unix,
-            table.attrs.invocation_time_local,
-            table.attrs.system_hostname,
-            table.attrs.messer_schema_version,
-            table.attrs.messer_pid_command
+            f'Table information:\n'
+            f'  Invocation time (local): {table.attrs.invocation_time_local}\n'
+            f'  System hostname: {table.attrs.system_hostname}\n'
+            f'  PID command: {table.attrs.messer_pid_command}\n'
+            #f'  PID: {table.attrs.messer_pid}\n'
+            f'  Messer schema version: {table.attrs.messer_schema_version}\n'
+            f'  Number of rows: {table.nrows}\n'
         )
-        print(table)
-        print('Column names:\n%s' % ('\n'.join(c for c in table.colnames)))
+        print(f"Last row's (local) time: {table[-1]['isotime_local'].decode('ascii')}")
+        print('Column names:\n  %s' % ('\n  '.join(c for c in table.colnames)))
         hdf5file.close()
         sys.exit(0)
 
