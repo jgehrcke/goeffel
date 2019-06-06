@@ -355,7 +355,7 @@ def plot_subplot(ax, column_dict, series, plotsettings):
 
 def parse_datafile_into_dataframe(datafilepath):
 
-    log.info('Read data from from: %s', datafilepath)
+    log.info('Read data from: %s', datafilepath)
 
     try:
         df = pd.read_csv(
