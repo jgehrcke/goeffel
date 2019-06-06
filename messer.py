@@ -323,7 +323,7 @@ def process_outfile_args():
     elif ARGS.outfile_hdf5_path:
         path_hdf5 = ARGS.outfile_hdf5_path
     else:
-        path_hdf5 = ARGS.hdf5_path_prefix + INVOCATION_TIME_LOCAL_STRING + '.hdf5'
+        path_hdf5 = f'{ARGS.hdf5_path_prefix}_{INVOCATION_TIME_LOCAL_STRING}.hdf5'
 
     # Determine path for CSV output file. `None` signals to not write one.
     if not ARGS.enable_csv:
@@ -331,7 +331,7 @@ def process_outfile_args():
     elif ARGS.outfile_csv_path:
         path_csv = ARGS.outfile_csv_path
     else:
-        path_csv = ARGS.csv_path_prefix + INVOCATION_TIME_LOCAL_STRING + '.csv'
+        path_csv = f'{ARGS.csv_path_prefix}_{INVOCATION_TIME_LOCAL_STRING}.csv'
 
     if path_hdf5:
         if os.path.exists(path_hdf5):
