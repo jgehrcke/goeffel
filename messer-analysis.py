@@ -24,6 +24,7 @@
 
 import argparse
 import logging
+import os
 import math
 import re
 import sys
@@ -31,6 +32,7 @@ import textwrap
 
 from collections import Counter, OrderedDict
 from datetime import datetime, timedelta
+
 
 logfmt = "%(asctime)s.%(msecs)03d %(name)s %(levelname)s: %(message)s"
 datefmt = "%y%m%d-%H:%M:%S"
@@ -43,17 +45,59 @@ ARGS = None
 
 def main():
 
+    # This modifies the global `ARGS`.
+    parse_cmdline_args()
+
+    # TODO(JP): build this functionality out: print properly, integrate
+    # properly with argparse.
+    if hasattr(ARGS, 'inspect_inputfile'):
+        inspect_data_file()
+        sys.exit(0)
+
+    lazy_load_big_packages()
+
+    if ARGS.command == 'magic':
+
+        dataframe = parse_datafile_into_dataframe(ARGS.datafile_for_magicplot)
+        plot_magic(dataframe)
+        plt.show()
+        sys.exit(0)
+
+    dataframe_label_pairs = []
+    for filepath, series_label in ARGS.series:
+        dataframe_label_pairs.append(
+            (parse_datafile_into_dataframe(filepath), series_label)
+        )
+
+    # Translate each `--column ....` argument into a dictionary.
+    column_dicts = []
+    keys = ('column_name', 'y_label', 'plot_title', 'rolling_wdw_width_seconds')
+    for values in ARGS.column:
+        # TODO: add check that rolling_wdw_width_seconds is an integer.
+        column_dicts.append(dict(zip(keys, values)))
+
+    for column_dict in column_dicts:
+        plot_column_multiple_subplots(dataframe_label_pairs, column_dict)
+
+    plt.show()
+
+
+def parse_cmdline_args():
+
     description = textwrap.dedent(
     """
-    Process and plot one or multiple time series created with messer.py.
+    Process and plot one or multiple time series created with messer.
     """)
 
     parser = argparse.ArgumentParser(
         description=description,
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
+
     subparsers = parser.add_subparsers(dest='command')
-    # From Python 3.7 on `required=True` can be provided as kwarg above.
+    # From Python 3.7 on `required=True` can be provided as kwarg above. This
+    # means that one of the commands is required, and a proper error message is
+    # generated if no sub command is provided.
     subparsers.required = True
 
     isparser = subparsers.add_parser('inspect', help='Inspect data file')
@@ -63,12 +107,13 @@ def main():
         help='Path to Messer data file.',
     )
 
-    plotparser = subparsers.add_parser('magic', help='Magic ;]')
-    plotparser.add_argument(
+    magicparser = subparsers.add_parser('magic', help='Magic ;]')
+    magicparser.add_argument(
         'datafile_for_magicplot',
         metavar='PATH',
         help='Messer data file containing process and system metrics.'
     )
+
 
     plotparser = subparsers.add_parser('plot', help='Plot data in a flexible manner')
     plotparser.add_argument(
@@ -110,62 +155,49 @@ def main():
         metavar=('YLIM_MIN', 'YLIM_MAX'),
         help='Set a custom global y limit (min, max) to all plots'
     )
-
     global ARGS
     ARGS = parser.parse_args()
 
-    # TODO(JP): build this functionality out: print properly, integrate
-    # properly with argparse.
-    if hasattr(ARGS, 'inspect_inputfile'):
-        inspect_data_file()
-        sys.exit(0)
-
-    lazy_load_big_packages()
-
-    if ARGS.command == 'magic':
-        dataframe = parse_datafile_into_dataframe(ARGS.datafile_for_magicplot)
-        plot_magic(dataframe)
-        plt.show()
-        sys.exit(0)
-
-    dataframe_label_pairs = []
-    for filepath, series_label in ARGS.series:
-        dataframe_label_pairs.append(
-            (parse_datafile_into_dataframe(filepath), series_label)
-        )
-
-    # Translate each `--column ....` argument into a dictionary.
-    column_dicts = []
-    keys = ('column_name', 'y_label', 'plot_title', 'rolling_wdw_width_seconds')
-    for values in ARGS.column:
-        # TODO: add check that rolling_wdw_width_seconds is an integer.
-        column_dicts.append(dict(zip(keys, values)))
-
-    for column_dict in column_dicts:
-        plot_column_multiple_subplots(dataframe_label_pairs, column_dict)
-
-    plt.show()
-
 
 def inspect_data_file():
-    import tables
-    hdf5file = tables.open_file(ARGS.inspect_inputfile, 'r')
-    print(f'File information:\n{hdf5file}')
-    # TODO(JP): handle case when table does not exist.
-    table = hdf5file.root.messer_timeseries
-    print(
-        f'Table information:\n'
-        f'  Invocation time (local): {table.attrs.invocation_time_local}\n'
-        f'  System hostname: {table.attrs.system_hostname}\n'
-        f'  PID command: {table.attrs.messer_pid_command}\n'
-        #f'  PID: {table.attrs.messer_pid}\n'
-        f'  Messer schema version: {table.attrs.messer_schema_version}\n'
-        f'  Number of rows: {table.nrows}\n'
-    )
-    print(f"Last row's (local) time: {table[-1]['isotime_local'].decode('ascii')}")
-    print('Column names:\n  %s' % ('\n  '.join(c for c in table.colnames)))
-    hdf5file.close()
+    if not os.path.isfile(ARGS.inspect_inputfile):
+        sys.exit('Not a file: %s' % (ARGS.inspect_inputfile, ))
 
+    import tables
+
+    with tables.open_file(ARGS.inspect_inputfile, 'r') as hdf5file:
+        try:
+            table = hdf5file.root.messer_timeseries
+        except tables.exceptions.NoSuchNodeError:
+            log.info('HDF5 file details:\n%s', hdf5file)
+            log.error('Could not find /messer_timeseries object. Exit.')
+            sys.exit(1)
+
+        print(
+            f'Measurement meta data:\n'
+            f'  System hostname: {table.attrs.system_hostname}\n'
+            f'  Invocation time (local): {table.attrs.invocation_time_local}\n'
+            f'  PID command: {table.attrs.messer_pid_command}\n'
+            f'  PID: {table.attrs.messer_pid}\n'
+            #f'  Messer schema version: {table.attrs.messer_schema_version}\n'
+        )
+
+        frlt = table[0]['isotime_local'].decode('ascii')
+        lrlt = table[-1]['isotime_local'].decode('ascii')
+        npoints = table.nrows * len(table.colnames)
+
+        print(f'Table properties:')
+        print(f'  Number of rows: {table.nrows}')
+        print(f'  Number of columns: {len(table.colnames)}')
+        print(f'  Number of data points (rows*columns): {npoints:.2E}')
+        print(f"  First row's (local) time: {frlt}")
+        print(f"  Last  row's (local) time: {lrlt}")
+        print('  Time span: %s' % (pretty_timedelta(
+            datetime.fromtimestamp(table[-1]['unixtime']) -
+            datetime.fromtimestamp(table[0]['unixtime'])
+        ), ))
+
+        print('\nColumn names:\n  %s' % ('\n  '.join(c for c in table.colnames)))
 
 
 def lazy_load_big_packages():
@@ -627,11 +659,11 @@ def pretty_timedelta(timedelta):
     hours, seconds = divmod(seconds, 3600)
     minutes, seconds = divmod(seconds, 60)
     if days > 0:
-        return '%dd%dh%dm%ds' % (days, hours, minutes, seconds)
+        return '%dd %dh %dm %ds' % (days, hours, minutes, seconds)
     elif hours > 0:
-        return '%dh%dm%ds' % (hours, minutes, seconds)
+        return '%dh %dm %ds' % (hours, minutes, seconds)
     elif minutes > 0:
-        return '%dm%ds' % (minutes, seconds)
+        return '%dm %ds' % (minutes, seconds)
     else:
         return '%ds' % (seconds,)
 
