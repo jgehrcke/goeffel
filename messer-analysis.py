@@ -48,8 +48,6 @@ def main():
     # This modifies the global `ARGS`.
     parse_cmdline_args()
 
-    # TODO(JP): build this functionality out: print properly, integrate
-    # properly with argparse.
     if hasattr(ARGS, 'inspect_inputfile'):
         inspect_data_file()
         sys.exit(0)
@@ -57,10 +55,7 @@ def main():
     lazy_load_big_packages()
 
     if ARGS.command == 'magic':
-
-        dataframe = parse_datafile_into_dataframe(ARGS.datafile_for_magicplot)
-        plot_magic(dataframe)
-        plt.show()
+        cmd_magic()
         sys.exit(0)
 
     dataframe_label_pairs = []
@@ -81,6 +76,31 @@ def main():
 
     plt.show()
 
+
+def cmd_magic():
+    # Note(JP): using --tail / --head / --first / --last can also be used to
+    # speed up parsing.
+    # dataframe = parse_hdf5file_into_dataframe(ARGS.datafile_for_magicplot)
+
+    # https://stackoverflow.com/questions/46493567/how-to-read-nrows-from-pandas-hdf-storage
+    # https://github.com/pandas-dev/pandas/issues/11188
+    # and this duplicate: https://github.com/pandas-dev/pandas/issues/14568
+    #
+    # and my solution attempt: https://github.com/pandas-dev/pandas/pull/26818
+    #
+
+    if ARGS.head:
+        dataframe = dataframe = parse_hdf5file_into_dataframe(
+            ARGS.datafile_for_magicplot,
+            #startrow=0,
+            stoprow=ARGS.head
+        )
+
+    if ARGS.tail:
+        raise NotImplementedError
+
+    plot_magic(dataframe)
+    plt.show()
 
 def parse_cmdline_args():
 
@@ -113,7 +133,30 @@ def parse_cmdline_args():
         metavar='PATH',
         help='Messer data file containing process and system metrics.'
     )
-
+    # Allow only _one_ of the following four options.
+    meg = magicparser.add_mutually_exclusive_group()
+    #meg.add_argument(
+    #    '--first',
+    #    metavar='TIME OFFSET',
+    #    help='Analyze first part ...'
+    #)
+    #meg.add_argument(
+    #    '--last',
+    #    metavar='TIME OFFSET',
+    #    help='Analyze last part ...'
+    #)
+    meg.add_argument(
+       '--head',
+       metavar='N',
+       type=int,
+       help='Analyze only the first N rows of the data table.'
+    )
+    meg.add_argument(
+       '--tail',
+       metavar='N',
+       type=int,
+       help='Analyze only the last N rows of the data table.'
+    )
 
     plotparser = subparsers.add_parser('plot', help='Plot data in a flexible manner')
     plotparser.add_argument(
@@ -595,19 +638,22 @@ def plot_subplot(ax, column_dict, series, plotsettings):
     )
 
 
-def parse_datafile_into_dataframe(datafilepath):
+def parse_hdf5file_into_dataframe(filepath, startrow=None, stoprow=None):
 
-    log.info('Read data from: %s', datafilepath)
+    # df = pd.read_csv(
+    #     datafilepath,
+    #     comment='#',
+    #     index_col=0
+    # )
 
-    try:
-        df = pd.read_csv(
-            datafilepath,
-            comment='#',
-            index_col=0
-        )
-    except ValueError as e:
-        log.debug('Falling back to HDF parsing, CSV parsing failed: %s', e)
-        df = pd.read_hdf(datafilepath, key='messer_timeseries')
+    log.info('Read data from HDF5 file: %s', filepath)
+
+    df = pd.read_hdf(
+        filepath,
+        key='messer_timeseries',
+        start=startrow,
+        stop=stoprow,
+    )
 
     # Parse Unix timestamps into a DateTimeIndex object and replace the
     # dataframe's index (integers) with the new one.
