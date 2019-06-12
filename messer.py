@@ -836,6 +836,8 @@ def calc_diskstats(delta_t, s1, s2):
     `psutil.disk_io_counters()`, one at time t1, and the other at the (later)
     time t2, with t2 - t2 = delta_t.
     """
+    if not ARGS.diskstats:
+        return {}
 
     sampledict = OrderedDict()
 
