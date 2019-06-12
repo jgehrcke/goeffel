@@ -2,7 +2,17 @@
 
 - HDF5 file management:  build in a concept that allows for "running this
   permanently" while consuming predictable disk space. Something along the lines
-  of truncation, building a retention policy, or generally "file rotation).
+  of truncation, building a retention policy, or generally "file rotation").
 
 - File management in general: prevent accidental concurrent write access.
   Simple: check if file exists. More complex: file locking.
+
+- For plotting, wherever it makes sense: allow for selecting the first() or
+  last() parts of a time series, or use tail() or head() to use a row count.
+  I think this makes sense especially for the `magic` command.
+
+
+Ideas for walk-through / tutorial / blog:
+
+- Show how PID command picks up new PID
+- Show inspect
