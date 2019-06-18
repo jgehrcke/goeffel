@@ -239,7 +239,6 @@ def cmd_magic():
     # and my solution attempt: https://github.com/pandas-dev/pandas/pull/26818
     #
 
-    #if ARGS.first:
     dataframe = dataframe = parse_hdf5file_into_dataframe(
         ARGS.datafile_for_magicplot,
         #startrow=ARGS.tail,
@@ -248,10 +247,23 @@ def cmd_magic():
         last=ARGS.last
     )
 
-    #if ARGS.tail:
-    #    raise NotImplementedError
+    fig = plot_magic(dataframe)
 
-    plot_magic(dataframe)
+    def tl_on_resize(event):
+        fig.tight_layout()
+        fig.canvas.draw()
+        # `callback_id` can be set in the outer scope if desired, and then the
+        # disconnection would make this callback a one-time operation
+        # fig.canvas.mpl_disconnect(callback_id)
+
+    # Apply tight_layout routine after resize. This is when the user actually
+    # resizes the figure window or, more importantly, upon first draw where the
+    # window might be resized to screen dimensions if necessary (in some cases
+    # this is required for the initial figure to be displayed nicely). In the
+    # future the returned callback ID could be used to make this a one-time
+    # operation (if that turns out to be required).
+    _ = fig.canvas.mpl_connect('resize_event', tl_on_resize)
+
     plt.show()
 
 
@@ -297,18 +309,13 @@ def plot_magic(dataframe):
             'y_label': 'xvda1 wl [ms]',
             'plot_title': 'foo',
             'rolling_wdw_width_seconds': 5
-        }
-,
+        },
         {
             'column_name': 'system_loadavg1',
             'y_label': 'system_loadavg1',
             'plot_title': 'foo',
             'rolling_wdw_width_seconds': 0
         }
-
-
-
-
     ]
 
     ARGS.normalization_factor = 0
@@ -419,6 +426,10 @@ def plot_magic(dataframe):
     plt.tight_layout()
     plt.tight_layout()
     savefig(column_dict['plot_title'])
+
+    # Return matplotlib figure object for further processing for interactive
+    # mode.
+    return fig
 
 
 def plot_column_multiple_subplots(dataframe_label_pairs, column_dict):
