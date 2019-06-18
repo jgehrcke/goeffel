@@ -338,7 +338,7 @@ def plot_magic(dataframe, metadata):
 
     fig.text(
         0.5, 0.985,
-        f'Messer time series {metadata.invocation_time_local}',
+        f'Messer time series ({metadata.invocation_time_local})',
         verticalalignment='center',
         horizontalalignment='center',
         fontsize=13
@@ -346,7 +346,7 @@ def plot_magic(dataframe, metadata):
 
     fig.text(
         0.5, 0.972,
-        'subtitle',
+        f'hostname: {metadata.system_hostname}, PID command: {metadata.messer_pid_command}',
         verticalalignment='center',
         horizontalalignment='center',
         fontsize=10,
