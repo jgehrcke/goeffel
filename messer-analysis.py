@@ -77,31 +77,6 @@ def main():
     plt.show()
 
 
-def cmd_magic():
-    # Note(JP): using --tail / --head / --first / --last can also be used to
-    # speed up parsing.
-    # dataframe = parse_hdf5file_into_dataframe(ARGS.datafile_for_magicplot)
-
-    # https://stackoverflow.com/questions/46493567/how-to-read-nrows-from-pandas-hdf-storage
-    # https://github.com/pandas-dev/pandas/issues/11188
-    # and this duplicate: https://github.com/pandas-dev/pandas/issues/14568
-    #
-    # and my solution attempt: https://github.com/pandas-dev/pandas/pull/26818
-    #
-
-    if ARGS.head:
-        dataframe = dataframe = parse_hdf5file_into_dataframe(
-            ARGS.datafile_for_magicplot,
-            #startrow=0,
-            stoprow=ARGS.head
-        )
-
-    if ARGS.tail:
-        raise NotImplementedError
-
-    plot_magic(dataframe)
-    plt.show()
-
 def parse_cmdline_args():
 
     description = textwrap.dedent(
@@ -135,16 +110,16 @@ def parse_cmdline_args():
     )
     # Allow only _one_ of the following four options.
     meg = magicparser.add_mutually_exclusive_group()
-    #meg.add_argument(
-    #    '--first',
-    #    metavar='TIME OFFSET',
-    #    help='Analyze first part ...'
-    #)
-    #meg.add_argument(
-    #    '--last',
-    #    metavar='TIME OFFSET',
-    #    help='Analyze last part ...'
-    #)
+    meg.add_argument(
+       '--first',
+       metavar='TIME OFFSET STRING',
+       help='Analyze the first part of the time series data. Use pandas time offset string (such as 2D, meaning two days)'
+    )
+    meg.add_argument(
+       '--last',
+       metavar='TIME OFFSET STRING',
+       help='Analyze the list part of the time series data. Use pandas time offset string (such as 2D, meaning two days)'
+    )
     meg.add_argument(
        '--head',
        metavar='N',
@@ -250,6 +225,34 @@ def lazy_load_big_packages():
     import matplotlib as mpl
     import matplotlib.pyplot as plt
     plt.style.use('ggplot')
+
+
+def cmd_magic():
+    # Note(JP): using --tail / --head / --first / --last can also be used to
+    # speed up parsing.
+    # dataframe = parse_hdf5file_into_dataframe(ARGS.datafile_for_magicplot)
+
+    # https://stackoverflow.com/questions/46493567/how-to-read-nrows-from-pandas-hdf-storage
+    # https://github.com/pandas-dev/pandas/issues/11188
+    # and this duplicate: https://github.com/pandas-dev/pandas/issues/14568
+    #
+    # and my solution attempt: https://github.com/pandas-dev/pandas/pull/26818
+    #
+
+    #if ARGS.first:
+    dataframe = dataframe = parse_hdf5file_into_dataframe(
+        ARGS.datafile_for_magicplot,
+        #startrow=ARGS.tail,
+        #stoprow=ARGS.head,
+        first=ARGS.first,
+        last=ARGS.last
+    )
+
+    #if ARGS.tail:
+    #    raise NotImplementedError
+
+    plot_magic(dataframe)
+    plt.show()
 
 
 def plot_magic(dataframe):
@@ -638,7 +641,8 @@ def plot_subplot(ax, column_dict, series, plotsettings):
     )
 
 
-def parse_hdf5file_into_dataframe(filepath, startrow=None, stoprow=None):
+def parse_hdf5file_into_dataframe(
+        filepath, startrow=None, stoprow=None, first=None, last=None):
 
     # df = pd.read_csv(
     #     datafilepath,
@@ -648,34 +652,52 @@ def parse_hdf5file_into_dataframe(filepath, startrow=None, stoprow=None):
 
     log.info('Read data from HDF5 file: %s', filepath)
 
+    # Note(JP): the `start` and `stop` approach may speed up reading massively
+    # large HDF5 files, but requires
+    # https://github.com/pandas-dev/pandas/pull/26818/ to be addressed.
     df = pd.read_hdf(
         filepath,
         key='messer_timeseries',
-        start=startrow,
-        stop=stoprow,
+        #start=startrow,
+        #stop=stoprow,
     )
 
-    # Parse Unix timestamps into a DateTimeIndex object and replace the
-    # dataframe's index (integers) with the new one.
+    # Parse Unix timestamps into a `pandas.DateTimeIndex` object and replace the
+    # DataFrame's index (integers) with the new one.
+    log.info("Convert `unixtime` column to pandas' timestamps")
     timestamps = pd.to_datetime(df['unixtime'], unit='s')
     df.index = timestamps
-    log.info('Number of samples: %s', len(df))
+
+    log.info('Number of samples (rows): %s', len(df))
 
     log.info('Check monotonicity of time index')
-    for i, t in enumerate(timestamps[1:]):
-        t_previous = timestamps[i]
-        if t < t_previous:
-            delta = t_previous - t
-            log.warning(
-                'log not monotonic at sample number %s (delta: %s)',
-                i,
-                delta
-            )
+    if not df.index.is_monotonic_increasing:
+        log.warning('Index not monotonic. Looking deeper.')
+        # Note(JP): can probably be built faster.
+        for i, t in enumerate(timestamps[1:]):
+            t_previous = timestamps[i]
+            if t < t_previous:
+                delta = t_previous - t
+                log.warning(
+                    'log not monotonic at sample number %s (delta: %s)',
+                    i,
+                    delta
+                )
 
-    starttime = timestamps.iloc[0]
-    log.info('Starttime (UTC): %s', starttime)
-    timespan = timestamps.iloc[-1] - starttime
-    log.info('Time span: %r', pretty_timedelta(timespan))
+    if first:
+        log.info('Analyze only the first part of time series, offset: %s', first)
+        df = df.first(first)
+        assert not last
+
+    if last:
+        log.info('Analyze only the last part of time series, offset: %s', last)
+        df = df.last(last)
+        assert not first
+
+    starttime = df.index[0]
+    log.info('Time series start time (UTC): %s', starttime)
+    timespan = df.index[-1] - starttime
+    log.info('Time series time span: %r', pretty_timedelta(timespan))
 
     return df
 
