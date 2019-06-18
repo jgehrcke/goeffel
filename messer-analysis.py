@@ -641,7 +641,7 @@ def plot_subplot(ax, column_dict, series, plotsettings):
     if plotsettings['show_legend']:
         legend = ['raw samples']
         if window_width_seconds != 0:
-            legend.append('%s s rolling window average' % window_width_seconds)
+            legend.append('%s s rolling window mean' % window_width_seconds)
         ax.legend(
             legend,
             numpoints=4,
@@ -649,6 +649,9 @@ def plot_subplot(ax, column_dict, series, plotsettings):
         )
 
     ax.set_xlim(plotsettings['xlim'])
+
+    # https://stackoverflow.com/a/11386056/145400
+    ax.tick_params(axis='x', which='major', labelsize=8)
 
     if 'ylim' in plotsettings:
 
@@ -686,9 +689,13 @@ def parse_hdf5file_into_dataframe(
 
     log.info('Read data from HDF5 file: %s', filepath)
 
-    # Note(JP): the `start` and `stop` approach may speed up reading massively
-    # large HDF5 files, but requires
-    # https://github.com/pandas-dev/pandas/pull/26818/ to be addressed.
+    # Note(JP): the `start` and `stop` approach may speed up reading very large
+    # HDF5 files, but requires https://github.com/pandas-dev/pandas/pull/26818/
+    # to be addressed. Note that for a 60 MB (compressed) HDF5 file with 10 days
+    # worth of time series data the parsing takes 2 seconds on my machine. That
+    # is, using `start` and `stop` may only save about that much (1-2 seconds)
+    # of processing time and a bit of memory. That is, this technique only
+    # becomes meaningful for O(GB)-sized (compressed) HDF5 files.
     df = pd.read_hdf(
         filepath,
         key='messer_timeseries',
@@ -721,12 +728,12 @@ def parse_hdf5file_into_dataframe(
     if first:
         log.info('Analyze only the first part of time series, offset: %s', first)
         df = df.first(first)
-        assert not last
+        assert not last, 'both must not be provided'
 
     if last:
         log.info('Analyze only the last part of time series, offset: %s', last)
         df = df.last(last)
-        assert not first
+        assert not first, 'both must not be provided'
 
     starttime = df.index[0]
     log.info('Time series start time (UTC): %s', starttime)
