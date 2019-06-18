@@ -23,6 +23,7 @@
 # SOFTWARE.
 
 import argparse
+import copy
 import logging
 import os
 import math
@@ -239,7 +240,16 @@ def cmd_magic():
     # and my solution attempt: https://github.com/pandas-dev/pandas/pull/26818
     #
 
-    dataframe = dataframe = parse_hdf5file_into_dataframe(
+    def get_table_metadata():
+        import tables
+        # Rely on this being a valid HDF5 file.
+        with tables.open_file(ARGS.datafile_for_magicplot, 'r') as hdf5file:
+            table = hdf5file.root.messer_timeseries
+            table_metadata = copy.copy(table.attrs)
+
+        return table_metadata
+
+    dataframe = parse_hdf5file_into_dataframe(
         ARGS.datafile_for_magicplot,
         #startrow=ARGS.tail,
         #stoprow=ARGS.head,
@@ -247,27 +257,22 @@ def cmd_magic():
         last=ARGS.last
     )
 
-    fig = plot_magic(dataframe)
+    metadata = get_table_metadata()
 
-    def tl_on_resize(event):
-        fig.tight_layout()
-        fig.canvas.draw()
-        # `callback_id` can be set in the outer scope if desired, and then the
-        # disconnection would make this callback a one-time operation
-        # fig.canvas.mpl_disconnect(callback_id)
+    fig, custom_tight_layout_func = plot_magic(dataframe, metadata)
 
-    # Apply tight_layout routine after resize. This is when the user actually
-    # resizes the figure window or, more importantly, upon first draw where the
-    # window might be resized to screen dimensions if necessary (in some cases
-    # this is required for the initial figure to be displayed nicely). In the
-    # future the returned callback ID could be used to make this a one-time
-    # operation (if that turns out to be required).
-    _ = fig.canvas.mpl_connect('resize_event', tl_on_resize)
+    # Apply custom "tight layout" routine after resize. This is when the user
+    # actually resizes the figure window or, more importantly, upon first draw
+    # where the window might be resized to screen dimensions. In some cases this
+    # is required for the initial figure to be displayed nicely. In the future
+    # the returned callback ID could be used to disconnect, i.e. to make this a
+    # one-time operation (if that turns out to be required).
+    _ = fig.canvas.mpl_connect('resize_event', custom_tight_layout_func)
 
     plt.show()
 
 
-def plot_magic(dataframe):
+def plot_magic(dataframe, metadata):
     """
     Create a single figure with multiple subplots. Each subplot comes from a
     different column in the same dataframe.
@@ -331,17 +336,16 @@ def plot_magic(dataframe):
     fig = plt.gcf()
     fig.set_size_inches(12, 17)
 
-    # Add title and subtitle to figure.
     fig.text(
-        0.5, 0.98,
-        'Plot title',
+        0.5, 0.985,
+        f'Messer time series {metadata.invocation_time_local}',
         verticalalignment='center',
         horizontalalignment='center',
-        fontsize=14
+        fontsize=13
     )
 
     fig.text(
-        0.5, 0.96,
+        0.5, 0.972,
         'subtitle',
         verticalalignment='center',
         horizontalalignment='center',
@@ -420,16 +424,35 @@ def plot_magic(dataframe):
 
     # Align the subplots a little nicer, make more use of space. `hspace`: The
     # amount of height reserved for space between subplots, expressed as a
-    # fraction of the average axis height
+    # fraction of the average axis height.
+
+    # Note that `tight_layout` does not consider `fig.suptitle()`. Also see
+    # https://stackoverflow.com/a/45161551/145400
     #plt.subplots_adjust(
-    #    hspace=0.05, left=0.05, right=0.97, bottom=0.1, top=0.95)
-    plt.tight_layout()
-    plt.tight_layout()
+    #    hspace=0.05 left=0.05, right=0.97, bottom=0.1, top=0.95)
+    #plt.tight_layout()
+
+    # Note that subplots_adjust must be called after any calls to tight_layout,
+    # or there will be no effect of calling subplots_adjust. Also see
+    # https://stackoverflow.com/a/8248506/145400
+
+
+    def custom_tight_layout_func(event=None):
+        """This function can be called as a callback in response to matplotlib
+        events such as a window resize event.
+        """
+        plt.tight_layout(rect=[0, 0, 1, 0.97])
+        plt.subplots_adjust(hspace=0.015)
+
+    custom_tight_layout_func()
+
+    #plt.tight_layout()
+
     savefig(column_dict['plot_title'])
 
     # Return matplotlib figure object for further processing for interactive
     # mode.
-    return fig
+    return fig, custom_tight_layout_func
 
 
 def plot_column_multiple_subplots(dataframe_label_pairs, column_dict):
