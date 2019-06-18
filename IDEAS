@@ -11,8 +11,14 @@
   last() parts of a time series, or use tail() or head() to use a row count.
   I think this makes sense especially for the `magic` command.
 
+- For the magic plot allow for a non-interactive mode which only writes to disk.
+
 
 Ideas for walk-through / tutorial / blog:
 
 - Show how PID command picks up new PID
 - Show inspect
+- Show magic
+- Show non-interactive magic, writing PNG file
+
+
