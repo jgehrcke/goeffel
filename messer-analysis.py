@@ -638,8 +638,17 @@ def plot_subplot(ax, column_dict, series, plotsettings):
             if 'ylim' not in plotsettings:
                 log.info('symlog: set lower ylim to 0')
                 # Make sure to show the lower end, the zero, by default.
-                ax.set_ylim((0, ax.get_ylim()[1]))
-        ax.set_yscale(column_dict['yscale'])
+                _prevmax = ax.get_ylim()[1]
+                ax.set_ylim((0, _prevmax * 1.4))
+            # https://github.com/matplotlib/matplotlib/issues/7008
+            # https://github.com/matplotlib/matplotlib/issues/10369
+            ax.set_yscale(
+                'symlog',
+                linscaley=0.4,
+                subsy=[2, 3, 4, 5, 6, 7, 8, 9]
+            )
+        else:
+            ax.set_yscale(column_dict['yscale'])
 
     # With `subplots()` sharex option this can be set for all subplots.
     ax.set_xlabel('Time (UTC)', fontsize=10)
@@ -667,6 +676,7 @@ def plot_subplot(ax, column_dict, series, plotsettings):
 
     # https://stackoverflow.com/a/11386056/145400
     ax.tick_params(axis='x', which='major', labelsize=8)
+    ax.tick_params(axis='y', which='major', labelsize=8)
 
     if 'ylim' in plotsettings:
 
