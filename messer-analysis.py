@@ -281,7 +281,7 @@ def plot_magic(dataframe, metadata):
     column_dicts = [
         {
             'column_name': 'proc_util_percent_total',
-            'y_label': 'CPU util (total) %',
+            'y_label': 'Process CPU util (total) %',
             'plot_title': 'foo',
             'rolling_wdw_width_seconds': 5,
         },
@@ -294,35 +294,39 @@ def plot_magic(dataframe, metadata):
         },
         {
             'column_name': 'proc_io_write_rate_hz',
-            'y_label': 'write() rate [Hz]',
+            'y_label': 'Process write() rate [Hz]',
             'plot_title': 'foo',
-            'rolling_wdw_width_seconds': 5
+            'rolling_wdw_width_seconds': 5,
+            'yscale': 'symlog'
         },
         {
             'column_name': 'proc_io_write_throughput_mibps',
-            'y_label': 'write() tp [MiB/s]',
+            'y_label': 'Process write() tp [MiB/s]',
             'plot_title': 'foo',
-            'rolling_wdw_width_seconds': 5
-        },
-        {
-            'column_name': 'disk_xvda1_util_percent',
-            'y_label': 'xvda1 util %',
-            'plot_title': 'foo',
-            'rolling_wdw_width_seconds': 5
-        },
-        {
-            'column_name': 'disk_xvda1_write_latency_ms',
-            'y_label': 'xvda1 wl [ms]',
-            'plot_title': 'foo',
-            'rolling_wdw_width_seconds': 5
+            'rolling_wdw_width_seconds': 5,
+            'yscale': 'symlog'
         },
         {
             'column_name': 'system_loadavg1',
-            'y_label': 'system_loadavg1',
+            'y_label': 'System 1 min load avg',
             'plot_title': 'foo',
             'rolling_wdw_width_seconds': 0
         }
     ]
+
+    # Dynamically add columns based on args.
+        # {
+        #     'column_name': 'disk_xvda1_util_percent',
+        #     'y_label': 'xvda1 util %',
+        #     'plot_title': 'foo',
+        #     'rolling_wdw_width_seconds': 5
+        # },
+        # {
+        #     'column_name': 'disk_xvda1_write_latency_ms',
+        #     'y_label': 'xvda1 wl [ms]',
+        #     'plot_title': 'foo',
+        #     'rolling_wdw_width_seconds': 5
+        # },
 
     # Note(JP): this is a quick workaround to populate properties required in
     # code path downstream.
@@ -449,7 +453,8 @@ def plot_magic(dataframe, metadata):
         events such as a window resize event.
         """
         plt.tight_layout(rect=[0, 0, 1, 0.97])
-        plt.subplots_adjust(hspace=0.015)
+        # hspace controls the _vertical_ space between subplots.
+        plt.subplots_adjust(hspace=0.019)
 
     custom_tight_layout_func()
 
