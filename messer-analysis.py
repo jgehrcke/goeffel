@@ -323,18 +323,24 @@ def plot_magic(dataframe, metadata):
         }
     ]
 
+    # Note(JP): this is a quick workaround to populate properties required in
+    # code path downstream.
     ARGS.normalization_factor = 0
     ARGS.legend_loc = None
     ARGS.custom_y_limit = None
 
     column_count = len(column_dicts)
 
+    # Create a new figure.
     plt.figure()
 
     # Defaults are 6.4x4.8 inches at 100 dpi, make canvas significantly larger
     # so that more details can be shown. But... vertically! :)
+    # Make vertical size dependent on column count.
+    figure_height_inches = 2.28 * column_count
+
     fig = plt.gcf()
-    fig.set_size_inches(12, 17)
+    fig.set_size_inches(12, figure_height_inches)
 
     fig.text(
         0.5, 0.985,
@@ -345,7 +351,7 @@ def plot_magic(dataframe, metadata):
     )
 
     fig.text(
-        0.5, 0.972,
+        0.5, 0.970,
         f'hostname: {metadata.system_hostname}, PID command: {metadata.messer_pid_command}',
         verticalalignment='center',
         horizontalalignment='center',
