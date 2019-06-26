@@ -283,13 +283,14 @@ def plot_magic(dataframe, metadata):
             'column_name': 'proc_util_percent_total',
             'y_label': 'CPU util (total) %',
             'plot_title': 'foo',
-            'rolling_wdw_width_seconds': 5
-         },
+            'rolling_wdw_width_seconds': 5,
+        },
         {
             'column_name': 'proc_io_read_rate_hz',
-            'y_label': 'read() rate [Hz]',
+            'y_label': 'Process read() rate [Hz]',
             'plot_title': 'foo',
-            'rolling_wdw_width_seconds': 5
+            'rolling_wdw_width_seconds': 5,
+            'yscale': 'symlog'
         },
         {
             'column_name': 'proc_io_write_rate_hz',
@@ -632,6 +633,14 @@ def plot_subplot(ax, column_dict, series, plotsettings):
             #markeredgecolor='gray'
             )
 
+    if 'yscale' in column_dict:
+        if column_dict['yscale'] == 'symlog':
+            if 'ylim' not in plotsettings:
+                log.info('symlog: set lower ylim to 0')
+                # Make sure to show the lower end, the zero, by default.
+                ax.set_ylim((0, ax.get_ylim()[1]))
+        ax.set_yscale(column_dict['yscale'])
+
     # With `subplots()` sharex option this can be set for all subplots.
     ax.set_xlabel('Time (UTC)', fontsize=10)
 
@@ -668,6 +677,7 @@ def plot_subplot(ax, column_dict, series, plotsettings):
         if nf != 0:
             ylim = ylim[0] / nf, ylim[1] / nf
 
+        log.info('set custom y lim')
         ax.set_ylim(ylim)
 
     # A custom Y limit takes precedence over the limit set above.
