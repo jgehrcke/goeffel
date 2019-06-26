@@ -9,29 +9,30 @@ process-specific metrics into context.
 
 Highlights:
 
-- High sampling frequency, measurement correctness also under load. See below.
+- High sampling frequency: 2 Hz
+- Optimized for correct measurement, also under load.
 - Messer can follow a process subject to process ID changes. This is useful when
-  the process you want to observe may occasionally restart (for that to work you
-  need to provide a command which reliably resolves the new process ID, for
-  example with `--pid-command "pgrep supertool"`).
-- Messer writes the measured quantities over time (time series data!) as
-  structured data into a HDF5 file, and automatically annotates the output file
-  with relevant metadata such as program invocation time, system hostname,
-  Messer software version
-- Messer provides a time series analysis and plotting tool.
+  the process you want to observe is expected to occasionally restart. For that
+  to work you need to provide a command which reliably resolves the new process
+  ID, for example with `--pid-command "pgrep supertool"`.
+- Messer writes the measured quantities over time (time series data!) into an
+  [HDF5](https://en.wikipedia.org/wiki/Hierarchical_Data_Format) file, and
+  automatically annotates the output file with relevant metadata such as program
+  invocation time, system hostname, Messer software version.
+- Messer comes with a data plotting tool, separate from the data acquisition
+  program.
 
 Messer values measurement correctness very highly. Some aspects:
 
-- It uses a sampling rate of 0.5 seconds (by default) making short spikes
-  visible.
+- It uses a sampling interval of 0.5 seconds (by default) for making narrow
+  spikes visible.
 - The core sampling loop does little work besides the measurement itself.
 - The measurement process which runs the core sampling loop writes each sample
-  to a queue (an in-memory buffer). Messer uses a separate process for consuming
-  this queue and for emitting time series data for later inspection (that is,
-  measurement is decoupled from data emission, making the sampling rate more
-  predictable when persisting data on disk, or generally upon backpressure).
-
-
+  to a queue which serves as an in-memory buffer). Messer uses a separate
+  process for consuming this queue and for emitting time series data for later
+  inspection (that is, measurement is decoupled from data emission, making the
+  sampling rate more predictable when persisting data on disk, or generally upon
+  backpressure).
 
 ## Motivation
 
