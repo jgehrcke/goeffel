@@ -649,7 +649,8 @@ def plot_subplot(ax, column_dict, series, plotsettings):
             # https://github.com/matplotlib/matplotlib/issues/10369
             ax.set_yscale(
                 'symlog',
-                linscaley=0.4,
+                linthreshy=1,
+                linscaley=0.25,
                 subsy=[2, 3, 4, 5, 6, 7, 8, 9]
             )
         else:
