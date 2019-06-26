@@ -49,6 +49,7 @@ import sys
 import time
 import os
 import platform
+import signal
 import subprocess
 import multiprocessing
 
@@ -105,7 +106,7 @@ References for interpreting output:
 
     - https://serverfault.com/a/85481/121951
 
-  Other notes:
+  Notes about HDF5:
 
     - For writing the HDF5 file we could use pandas' pd.HDFStore implementation.
       However, already requiring pytables for measurement is a pretty big
@@ -113,7 +114,10 @@ References for interpreting output:
       measurement system itself.
 
     - https://cyrille.rossant.net/moving-away-hdf5/
-    -
+    - http://hdf-forum.184993.n3.nabble.com/File-corruption-and-hdf5-design-considerations-td4025305.html
+    - https://pytables-users.narkive.com/QH2WlyqN/corrupt-hdf5-files
+    - https://www.hdfgroup.org/2015/05/whats-coming-in-the-hdf5-1-10-0-release/
+    - https://stackoverflow.com/q/35837243/145400
 """
 
 
@@ -131,11 +135,10 @@ logging.basicConfig(
 # From the `cpustat` documentation: "Linux CPU time accounting is done in terms
 # of whole "clock ticks", which are often 100ms. This can cause some strange
 # values when sampling every 200ms.""
-SAMPLE_INTERVAL_SECONDS = 1.0
+SAMPLE_INTERVAL_SECONDS = 0.5
 
 
 PROCESS_PID_POLL_INTERVAL_SECONDS = 2.0
-
 
 # Measure invocation time (is consumed in various places).
 INVOCATION_TIME_UNIX_TIMESTAMP = time.time()
@@ -146,15 +149,27 @@ INVOCATION_TIME_LOCAL_STRING = datetime.fromtimestamp(
 MESSER_SAMPLE_SCHEMA_VERSION = 1
 
 
-# Will be populated with options from command line arguments.
+# Will be populated by ArgumentParser, with options from the command line.
 ARGS = None
+
+
+CSV_COLUMN_HEADER_WRITTEN = False
+
+
+OUTFILE_PATH_HDF5 = None
+OUTFILE_PATH_CSV = None
+
+
+# For choosing compression parameters, interoperability and reliability
+# (reducing risk for corruption) matters more than throughput.
+HDF5_COMP_FILTER = tables.Filters(complevel=9, complib='zlib', fletcher32=True)
 
 
 def main():
 
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description='A tool for measuring system resource utilization',
+        description='A tool for measuring process and system resource utilization.',
         epilog=textwrap.dedent(__doc__).strip()
     )
 
@@ -162,10 +177,6 @@ def main():
     # command)?
 
     # Note(JP): build a mode where disk IO stats are collected for all disks?
-
-    # Note(JP): build in a concept that allows for "running this permanently",
-    # by building a retention policy, rotating HDF5 files (and deleting old
-    # ones), or something along these lines.
 
     # TODO(JP): measure performance impact of messer with another instance of
     # messer.
@@ -175,8 +186,14 @@ def main():
     what.add_argument(
         '--pid-command',
         metavar='\'PID COMMAND\'',
+        help='A shell command expected to return a single process ID on stdout.'
     )
-    what.add_argument('--pid', metavar='PROCESSID', type=int)
+    what.add_argument(
+        '--pid',
+        metavar='PROCESSID',
+        type=int,
+        help='A process ID.'
+    )
 
     # Collect ideas for more flexible configuration.
     # what.add_argument('--diskstats', action='store_true')
@@ -184,42 +201,95 @@ def main():
     parser.add_argument(
         '--diskstats',
         action='append',
-        metavar='DEVICENAME',
+        metavar='DEVNAME',
+        help='Measure disk I/O statistics for device DEVNAME.'
     )
 
     # TODO: make it so that at least one output file method is defined.
     # maybe: require HDF5 to work.
     # TODO: enable optional CSV output, in  addition.
     parser.add_argument(
-        '--outfile-hdf5',
+        '--hdf5-path-prefix',
+        metavar='PATH_PREFIX',
+        default='./messer_timeseries_',
+        help='Change the default HDF5 file path prefix. Suffix contains invocation time and file extension.'
+    )
+    parser.add_argument(
+        '--outfile-hdf5-path',
         metavar='PATH',
-        default='messer_timeseries_' + INVOCATION_TIME_LOCAL_STRING + '.hdf5',
+        default=None,
+        help='Use that if full control over HDF5 file path is required.'
+    )
+    parser.add_argument(
+        '--no-hdf5',
+        action='store_true',
+        default=False,
+        help='Disable writing to an HDF5 output file (default: enabled).'
     )
 
     parser.add_argument(
-        '--outfile-csv',
+        '--enable-csv',
+        action='store_true',
+        default=False,
+        help='Enable writing to a CSV output file (default: disabled).'
+    )
+    parser.add_argument(
+        '--csv-path-prefix',
+        metavar='PATH_PREFIX',
+        default='./messer_timeseries_',
+        help='Change the default CSV file path prefix. Suffix contains invocation time and file extension.'
+    )
+    parser.add_argument(
+        '--outfile-csv-path',
         metavar='PATH',
         default=None,
+        help='Use that if full control over HDF5 file path is required.'
+    )
+
+    parser.add_argument(
+        '--no-system-metrics',
+        action='store_true',
+        default=False,
+        help='Do not record system-global metrics (for a small reduction of the output data rate).'
     )
 
     global ARGS
     ARGS = parser.parse_args()
+
+    process_outfile_args()
 
     # Import here, delayed, instead of in the header (otherwise the command line
     # help / error reporting is noticeably slowed down).
     global psutil
     import psutil
 
-    # Do custom argument processing.
+    # Do more custom argument processing.
     process_diskstats_args()
+
+    if not ARGS.no_system_metrics:
+
+        for cn in ('system_loadavg1', 'system_loadavg5','system_loadavg15'):
+            hdf5_schema_add_column(colname=cn, coltype=tables.Float16Col)
+
+        for cn in (
+                'system_mem_available',
+                'system_mem_total',
+                'system_mem_used',
+                'system_mem_free',
+                'system_mem_shared',
+                'system_mem_buffers',
+                'system_mem_cached',
+                'system_mem_active',
+                'system_mem_inactive'):
+            hdf5_schema_add_column(colname=cn, coltype=tables.UInt64Col)
 
     # Set up the infrastructure for decoupling measurement (sample collection)
     # from persisting the data.
     samplequeue = multiprocessing.Queue()
 
     log.info(
-        'Collect time series for the folling metrics: \n%s',
-        '\n'.join(k for k in HDF5_SAMPLE_SCHEMA.keys()))
+        'Collect time series for the folling metrics: \n  %s',
+        '\n  '.join(k for k in HDF5_SAMPLE_SCHEMA.keys()))
 
     samplewriter = multiprocessing.Process(
         target=sample_writer_process,
@@ -241,6 +311,41 @@ def main():
         samplequeue.join_thread()
         samplewriter.join()
         log.debug('Sample writer process terminated')
+
+
+def process_outfile_args():
+    global OUTFILE_PATH_HDF5
+    global OUTFILE_PATH_CSV
+
+    # Determine path for HDF5 output file. `None` signals to not write one.
+    if ARGS.no_hdf5:
+        path_hdf5 = None
+    elif ARGS.outfile_hdf5_path:
+        path_hdf5 = ARGS.outfile_hdf5_path
+    else:
+        path_hdf5 = f'{ARGS.hdf5_path_prefix}_{INVOCATION_TIME_LOCAL_STRING}.hdf5'
+
+    # Determine path for CSV output file. `None` signals to not write one.
+    if not ARGS.enable_csv:
+        path_csv = None
+    elif ARGS.outfile_csv_path:
+        path_csv = ARGS.outfile_csv_path
+    else:
+        path_csv = f'{ARGS.csv_path_prefix}_{INVOCATION_TIME_LOCAL_STRING}.csv'
+
+    if path_hdf5:
+        if os.path.exists(path_hdf5):
+            sys.exit(f'Error: path exists: {path_hdf5}')
+        log.info(f'Will write data file {path_hdf5}')
+
+    if path_csv:
+        if os.path.exists(path_csv):
+            sys.exit(f'Error: path exists: {path_csv}')
+        log.info(f'Will write data file {path_csv}')
+
+    # Expose config to the rest of the program.
+    OUTFILE_PATH_HDF5 = path_hdf5
+    OUTFILE_PATH_CSV = path_csv
 
 
 def process_diskstats_args():
@@ -282,33 +387,19 @@ HDF5_SAMPLE_SCHEMA = {
     'unixtime': tables.Time64Col(pos=0),
     'isotime_local': tables.StringCol(26, pos=1),
 
-    # System-wide metrics.
-    'system_loadavg1': tables.Float16Col(pos=2),
-    'system_loadavg5': tables.Float16Col(pos=3),
-    'system_loadavg15': tables.Float16Col(pos=4),
-    'system_mem_available': tables.UInt64Col(pos=5),
-    'system_mem_total': tables.UInt64Col(pos=6),
-    'system_mem_used': tables.UInt64Col(pos=7),
-    'system_mem_free': tables.UInt64Col(pos=8),
-    'system_mem_shared': tables.UInt64Col(pos=9),
-    'system_mem_buffers': tables.UInt64Col(pos=10),
-    'system_mem_cached': tables.UInt64Col(pos=11),
-    'system_mem_active': tables.UInt64Col(pos=12),
-    'system_mem_inactive': tables.UInt64Col(pos=13),
-
     # Process-specific metrics.
-    'proc_pid': tables.Int32Col(pos=14),
-    'proc_util_percent_total': tables.Float32Col(pos=15),
-    'proc_util_percent_user': tables.Float32Col(pos=16),
-    'proc_util_percent_system': tables.Float32Col(pos=17),
-    'proc_io_read_throughput_mibps': tables.Float32Col(pos=18),
-    'proc_io_write_throughput_mibps': tables.Float32Col(pos=19),
-    'proc_io_read_rate_hz': tables.Float32Col(pos=20),
-    'proc_io_write_rate_hz': tables.Float32Col(pos=21),
-    'proc_mem_rss': tables.UInt64Col(pos=22),
-    'proc_mem_vms': tables.UInt64Col(pos=23),
-    'proc_mem_dirty': tables.UInt32Col(pos=24),
-    'proc_num_fds': tables.UInt32Col(pos=25),
+    'proc_pid': tables.Int32Col(pos=3),
+    'proc_util_percent_total': tables.Float32Col(pos=4),
+    'proc_util_percent_user': tables.Float32Col(pos=5),
+    'proc_util_percent_system': tables.Float32Col(pos=6),
+    'proc_io_read_throughput_mibps': tables.Float32Col(pos=7),
+    'proc_io_write_throughput_mibps': tables.Float32Col(pos=8),
+    'proc_io_read_rate_hz': tables.Float32Col(pos=9),
+    'proc_io_write_rate_hz': tables.Float32Col(pos=10),
+    'proc_mem_rss': tables.UInt64Col(pos=11),
+    'proc_mem_vms': tables.UInt64Col(pos=12),
+    'proc_mem_dirty': tables.UInt32Col(pos=13),
+    'proc_num_fds': tables.UInt32Col(pos=14),
 }
 
 
@@ -316,6 +407,61 @@ def hdf5_schema_add_column(colname, coltype):
     assert colname not in HDF5_SAMPLE_SCHEMA
     colpos = len(HDF5_SAMPLE_SCHEMA) + 1
     HDF5_SAMPLE_SCHEMA[colname] = coltype(pos=colpos)
+
+
+def _prepare_hdf5_file_if_not_yet_existing():
+
+    if os.path.exists(OUTFILE_PATH_HDF5):
+        return
+
+    # Do not use HDF5 groups. Write a single table per file, with a
+    # well-known table name so that the analysis program can discover.
+    # Note(JP): investicate chunk size, and generally explore providing an
+    # expected row count. For example, with a 1 Hz sampling rate aboout 2.5
+    # million rows are collected within 30 days:
+    # >>> 24 * 60 * 60 * 30
+    # 2592000
+
+    # TODO(JP): error out if file exists. At least warn.
+
+    log.info('Create HDF5 file: %s', OUTFILE_PATH_HDF5)
+
+    hdf5file = tables.open_file(
+        OUTFILE_PATH_HDF5,
+        mode='w',
+        title='messer.py time series file, invocation at ' + INVOCATION_TIME_LOCAL_STRING,
+        filters=HDF5_COMP_FILTER
+    )
+    hdf5table = hdf5file.create_table(
+        where='/',
+        name='messer_timeseries',
+        description=HDF5_SAMPLE_SCHEMA,
+        title='messer.py time series, invocation at ' + INVOCATION_TIME_LOCAL_STRING,
+    )
+
+    # Use so-called HDF5 table user attributes for storing relevant metadata.
+    hdf5table.attrs.invocation_time_unix = INVOCATION_TIME_UNIX_TIMESTAMP
+    hdf5table.attrs.invocation_time_local = INVOCATION_TIME_LOCAL_STRING
+    hdf5table.attrs.system_hostname = get_hostname()
+    hdf5table.attrs.messer_schema_version = MESSER_SAMPLE_SCHEMA_VERSION
+    # Store both, pid and pid command although we know only one is populated.
+    hdf5table.attrs.messer_pid_command = ARGS.pid_command
+    hdf5table.attrs.messer_pid = ARGS.pid
+    hdf5table.attrs.messer_sampling_interval_seconds = SAMPLE_INTERVAL_SECONDS
+    hdf5file.close()
+
+
+def _prepare_csv_file_if_not_yet_existing():
+
+    if os.path.exists(OUTFILE_PATH_CSV):
+        return
+
+    log.info('Create CSV file: %s', OUTFILE_PATH_CSV)
+    with open(OUTFILE_PATH_CSV, 'wb') as f:
+        f.write(b'# messer_timeseries\n')
+        f.write(b'# %s\n' (INVOCATION_TIME_LOCAL_STRING, ))
+        f.write(b'# system hostname: %s\n' (get_hostname(), ))
+        f.write(b'# schema version: %s\n' (MESSER_SAMPLE_SCHEMA_VERSION, ))
 
 
 def sample_writer_process(queue):
@@ -337,74 +483,15 @@ def sample_writer_process(queue):
     the data through a Queue-based buffer (in the parent process) between both
     processes.
     """
-
-    import signal
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
-    try:
-        hostname = platform.node()
-    except Exception as e:
-        log.info('Cannot get system hostname: %s', e)
-        hostname = ''
+    hdf5_sample_buffer = []
 
-    log.info('Create HDF5 file: %s', ARGS.outfile_hdf5)
-
-    # For choosing compression parameters, interoperability and reliability
-    # (reducing risk for corruption) matters more than throughput.
-    hdf5_compression_filter = tables.Filters(
-        complevel=5, complib='zlib', fletcher32=True)
-
-    hdf5file = tables.open_file(
-        ARGS.outfile_hdf5,
-        mode='w',
-        title='messer.py time series file, invocation at ' + INVOCATION_TIME_LOCAL_STRING,
-        filters=hdf5_compression_filter
-    )
-
-    csvfile = None
-    csv_column_header_written = False
-    if ARGS.outfile_csv:
-        log.info('Create CSV file: %s', ARGS.outfile_csv)
-        csvfile = open(ARGS.outfile_csv, 'wb')
-        csvfile.write(b'# messer_timeseries\n')
-        csvfile.write(b'# %s\n' (INVOCATION_TIME_LOCAL_STRING, ))
-        csvfile.write(b'# system hostname: %s\n' (hostname, ))
-        csvfile.write(b'# schema version: %s\n' (MESSER_SAMPLE_SCHEMA_VERSION, ))
-
-    # Do not use HDF5 groups. Write a single table per file, with a well-known
-    # table name so that the analysis program can discover.
-    # Note(JP): investicate chunk size, and generally explore providing an
-    # expected row count. For example, with a 1 Hz sampling rate aboout 2.5 million
-    # rows are collected within 30 days:
-    # >>> 24 * 60 * 60 * 30
-    # 2592000
-    #
-    hdf5table = hdf5file.create_table(
-        where='/',
-        name='messer_timeseries',
-        description=HDF5_SAMPLE_SCHEMA,
-        title='messer.py time series, invocation at ' + INVOCATION_TIME_LOCAL_STRING,
-    )
-
-    # Use so-called HDF5 table user attributes for storing relevant metadata.
-    hdf5table.attrs.invocation_time_unix = INVOCATION_TIME_UNIX_TIMESTAMP
-    hdf5table.attrs.invocation_time_local = INVOCATION_TIME_LOCAL_STRING
-    hdf5table.attrs.system_hostname = hostname
-    hdf5table.attrs.messer_schema_version = MESSER_SAMPLE_SCHEMA_VERSION
-    # Store both, pid and pid command although we know only one is populated.
-    hdf5table.attrs.messer_pid_command = ARGS.pid_command
-    hdf5table.attrs.messer_pid = ARGS.pid
-    hdf5table.attrs.messer_sampling_interval_seconds = SAMPLE_INTERVAL_SECONDS
-
-
-    # The pytables way of doing things: "The row attribute of table points to
-    # the Row instance that will be used to write data rows into the table. We
-    # write data simply by assigning the Row instance the values for each row as
-    # if it were a dictionary (although it is actually an extension class),
-    # using the column names as keys".
+    first_sample_written = False
 
     while True:
         sample = queue.get()
+        t_after_get = time.monotonic()
 
         # `sample` is expected to be an n-tuple or None. Shut down worker
         # process in case of `None`.
@@ -412,61 +499,97 @@ def sample_writer_process(queue):
             log.debug('Sample writer process: shutting down')
             break
 
-        time_before_flush = time.monotonic()
-
         # Simulate I/O slowness.
         # import random
         # time.sleep(random.randint(1, 10) / 30.0)
 
-        _write_sample_hdf5(sample, hdf5table)
+        _write_sample_csv_if_enabled(sample)
 
-        # Note(JP): how can we make it so that after this line the HDF5 file is
-        # *valid* and can be opened by other tooling? 'NoneType' object has no
-        # attribute 'get_node'
-        # 2019-05-28 18:27:57,355 - vitables.h5db.dbstreemodel - ERROR - Opening cancelled: file /home/jp/dev/messer/messer_timeseries_20190528_182722.hdf5 already open.
-        _write_sample_csv(sample, csvfile)
+        # Write N samples to disk together (it's fine to potentially lose a
+        # couple of seconds of time series data). Also write very first sample
+        # immediately so that writing the HDF5 file fails fast (if it fails...
+        # , instead of failing only after collecting the first N samples).
 
-        sample_write_latency = time.monotonic() - time_before_flush
+        if not first_sample_written:
+            _write_samples_hdf5_if_enabled([sample])
+            first_sample_written = True
+        elif len(hdf5_sample_buffer) == 20:
+            _write_samples_hdf5_if_enabled(hdf5_sample_buffer)
+            hdf5_sample_buffer = []
+        else:
+            hdf5_sample_buffer.append(sample)
 
-        log.debug('Wrote sample to file(s) within %.6f s', sample_write_latency)
-
-
-def _write_sample_hdf5(sample,  hdf5table):
-
-        for key, value in sample.items():
-            hdf5table.row[key] = value
-
-        # Write sample to pytable's table I/O buffer. Then flush to disk (early
-        # and often -- with the small data output rate it's not expected that
-        # frequent flushing creates a bottleneck).
-        hdf5table.row.append()
-        hdf5table.flush()
+        log.debug('Consumer iteration: %.6f s', time.monotonic() - t_after_get)
 
 
-def _write_sample_csv(sample, csvfile):
-    if csvfile is not None:
+def _write_samples_hdf5_if_enabled(samples):
+    """
+    For writing every sample go through the complete life cycle from open()ing
+    the file to close()ing the file to minimize the risk for data corruption. If
+    doing this once per SAMPLE_INTERVAL_SECONDS generates too much overhead a
+    proper solution would be to write more than one sample (row) in one go.
+    """
+    if OUTFILE_PATH_HDF5 is None:
+        # That *is* the signal to not write an HDF5 output file.
+        return
 
-        samplevalues = tuple(v for k, v in sample.items())
+    t0 = time.monotonic()
 
-        # Apply a bit of custom formatting.
-        # Note(JP): store these format strings closer to the column listing,
-        # and assemble a format string dynamically.
-        csv_sample_row = (
-            '%.6f, %s, %5.2f, %5.2f, %5.2f, '
-            '%d, %d, %d, %d, %d, %d, %d, %d, %d, '
-            '%d, %5.2f, %5.2f, %5.2f, %d, %d, %d, %d, %d, %d\n' % samplevalues
-        )
+    _prepare_hdf5_file_if_not_yet_existing()
+
+    with tables.open_file(OUTFILE_PATH_HDF5, 'a', filters=HDF5_COMP_FILTER) as f:
+        # Look up table based on well-known name.
+        hdf5table = f.root.messer_timeseries
+
+        # The pytables way of doing things: "The row attribute of table points to
+        # the Row instance that will be used to write data rows into the table. We
+        # write data simply by assigning the Row instance the values for each row as
+        # if it were a dictionary (although it is actually an extension class),
+        # using the column names as keys".
+        for sample in samples:
+            for key, value in sample.items():
+                hdf5table.row[key] = value
+            hdf5table.row.append()
+
+        # Leaving the context means flushing the table I/O buffer, updating all
+        # meta data in the HDF file, and closing the file both logically from a
+        # HDF5 perspective, but also from the kernel's / file system's
+        # perspective.
+
+    log.debug('Updated HDF5 file (took %.5f s)', time.monotonic() - t0)
+
+
+def _write_sample_csv_if_enabled(sample):
+    global CSV_COLUMN_HEADER_WRITTEN
+
+    if OUTFILE_PATH_CSV is None:
+        # That *is* the signal to not write a CSV output file.
+        return
+
+    _prepare_csv_file_if_not_yet_existing()
+
+    samplevalues = tuple(v for k, v in sample.items())
+
+    # Apply a bit of custom formatting.
+    # Note(JP): store these format strings closer to the column listing,
+    # and assemble a format string dynamically.
+    csv_sample_row = (
+        '%.6f, %s, %5.2f, %5.2f, %5.2f, '
+        '%d, %d, %d, %d, %d, %d, %d, %d, %d, '
+        '%d, %5.2f, %5.2f, %5.2f, %d, %d, %d, %d, %d, %d\n' % samplevalues
+    )
+
+    with open(OUTFILE_PATH_CSV, 'a') as f:
 
         # Write the column header to the CSV file if not yet done. Do that
         # here so that the column names can be explicitly read from an
         # (ordered) sample dicitionary.
-        if not csv_column_header_written:
-            csvfile.write(
+        if not CSV_COLUMN_HEADER_WRITTEN:
+            f.write(
                 ','.join(k for k in sample.keys()).encode('ascii') + b'\n')
-            csv_column_header_written = True
+            CSV_COLUMN_HEADER_WRITTEN = True
 
-        csvfile.write(csv_sample_row.encode('ascii'))
-        csvfile.flush()
+        f.write(csv_sample_row.encode('ascii'))
 
 
 def mainloop(samplequeue, samplewriter):
@@ -658,18 +781,6 @@ def generate_samples(pid):
         sampledict = OrderedDict((
             ('unixtime', time_sample_timestamp),
             ('isotime_local', time_sample_isostring_local),
-            ('system_loadavg1', loadavg[0]),
-            ('system_loadavg5', loadavg[1]),
-            ('system_loadavg15', loadavg[2]),
-            ('system_mem_available', system_mem.available),
-            ('system_mem_total', system_mem.total),
-            ('system_mem_used', system_mem.used),
-            ('system_mem_free', system_mem.free),
-            ('system_mem_shared', system_mem.shared),
-            ('system_mem_buffers', system_mem.buffers),
-            ('system_mem_cached', system_mem.cached),
-            ('system_mem_active', system_mem.active),
-            ('system_mem_inactive', system_mem.inactive),
             ('proc_pid', pid),
             ('proc_util_percent_total', proc_util_percent_total),
             ('proc_util_percent_user', proc_util_percent_user),
@@ -684,9 +795,24 @@ def generate_samples(pid):
             ('proc_num_fds', proc_num_fds),
         ))
 
+        if not ARGS.no_system_metrics:
+            sampledict.update(OrderedDict((
+                ('system_loadavg1', loadavg[0]),
+                ('system_loadavg5', loadavg[1]),
+                ('system_loadavg15', loadavg[2]),
+                ('system_mem_available', system_mem.available),
+                ('system_mem_total', system_mem.total),
+                ('system_mem_used', system_mem.used),
+                ('system_mem_free', system_mem.free),
+                ('system_mem_shared', system_mem.shared),
+                ('system_mem_buffers', system_mem.buffers),
+                ('system_mem_cached', system_mem.cached),
+                ('system_mem_active', system_mem.active),
+                ('system_mem_inactive', system_mem.inactive),
+            )))
+
         # Add disk sample data to sample dict.
-        for k, v in disksampledict.items():
-            sampledict[k] = v
+        sampledict.update(disksampledict)
 
         # For differential values, store 'new values' as 'old values' for next
         # iteration.
@@ -710,6 +836,8 @@ def calc_diskstats(delta_t, s1, s2):
     `psutil.disk_io_counters()`, one at time t1, and the other at the (later)
     time t2, with t2 - t2 = delta_t.
     """
+    if not ARGS.diskstats:
+        return {}
 
     sampledict = OrderedDict()
 
@@ -791,6 +919,14 @@ def calc_diskstats(delta_t, s1, s2):
 
     return sampledict
 
+
+def get_hostname():
+    try:
+        hostname = platform.node()
+    except Exception as e:
+        log.info('Cannot get system hostname: %s', e)
+        hostname = ''
+    return hostname
 
 def pid_from_cmd(pid_command):
     """

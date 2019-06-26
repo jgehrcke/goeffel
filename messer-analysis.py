@@ -23,7 +23,9 @@
 # SOFTWARE.
 
 import argparse
+import copy
 import logging
+import os
 import math
 import re
 import sys
@@ -31,6 +33,7 @@ import textwrap
 
 from collections import Counter, OrderedDict
 from datetime import datetime, timedelta
+
 
 logfmt = "%(asctime)s.%(msecs)03d %(name)s %(levelname)s: %(message)s"
 datefmt = "%y%m%d-%H:%M:%S"
@@ -43,27 +46,95 @@ ARGS = None
 
 def main():
 
+    # This modifies the global `ARGS`.
+    parse_cmdline_args()
+
+    if hasattr(ARGS, 'inspect_inputfile'):
+        inspect_data_file()
+        sys.exit(0)
+
+    lazy_load_big_packages()
+
+    if ARGS.command == 'magic':
+        cmd_magic()
+        sys.exit(0)
+
+    dataframe_label_pairs = []
+    for filepath, series_label in ARGS.series:
+        dataframe_label_pairs.append(
+            (parse_datafile_into_dataframe(filepath), series_label)
+        )
+
+    # Translate each `--column ....` argument into a dictionary.
+    column_dicts = []
+    keys = ('column_name', 'y_label', 'plot_title', 'rolling_wdw_width_seconds')
+    for values in ARGS.column:
+        # TODO: add check that rolling_wdw_width_seconds is an integer.
+        column_dicts.append(dict(zip(keys, values)))
+
+    for column_dict in column_dicts:
+        plot_column_multiple_subplots(dataframe_label_pairs, column_dict)
+
+    plt.show()
+
+
+def parse_cmdline_args():
+
     description = textwrap.dedent(
     """
-    Process and plot one or multiple time series created with messer.py.
+    Process and plot one or multiple time series created with messer.
     """)
 
     parser = argparse.ArgumentParser(
         description=description,
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    subparsers = parser.add_subparsers()
+
+    subparsers = parser.add_subparsers(dest='command')
+    # From Python 3.7 on `required=True` can be provided as kwarg above. This
+    # means that one of the commands is required, and a proper error message is
+    # generated if no sub command is provided.
+    subparsers.required = True
 
     isparser = subparsers.add_parser('inspect', help='Inspect data file')
     isparser.add_argument(
         'inspect_inputfile',
         metavar='PATH',
-        help='Path to data file',
+        help='Path to Messer data file.',
     )
 
-    plotparser = subparsers.add_parser('plot', help='Plot data')
+    magicparser = subparsers.add_parser('magic', help='Magic ;]')
+    magicparser.add_argument(
+        'datafile_for_magicplot',
+        metavar='PATH',
+        help='Messer data file containing process and system metrics.'
+    )
+    # Allow only _one_ of the following four options.
+    meg = magicparser.add_mutually_exclusive_group()
+    meg.add_argument(
+       '--first',
+       metavar='TIME OFFSET STRING',
+       help='Analyze the first part of the time series data. Use pandas time offset string (such as 2D, meaning two days)'
+    )
+    meg.add_argument(
+       '--last',
+       metavar='TIME OFFSET STRING',
+       help='Analyze the list part of the time series data. Use pandas time offset string (such as 2D, meaning two days)'
+    )
+    meg.add_argument(
+       '--head',
+       metavar='N',
+       type=int,
+       help='Analyze only the first N rows of the data table.'
+    )
+    meg.add_argument(
+       '--tail',
+       metavar='N',
+       type=int,
+       help='Analyze only the last N rows of the data table.'
+    )
 
-
+    plotparser = subparsers.add_parser('plot', help='Plot data in a flexible manner')
     plotparser.add_argument(
         '--series',
         nargs=2,
@@ -103,51 +174,49 @@ def main():
         metavar=('YLIM_MIN', 'YLIM_MAX'),
         help='Set a custom global y limit (min, max) to all plots'
     )
-
     global ARGS
     ARGS = parser.parse_args()
 
-    # TODO(JP): build this functionality out: print properly, integrate
-    # properly with argparse.
-    if hasattr(ARGS, 'inspect_inputfile'):
-        import tables
-        hdf5file = tables.open_file(ARGS.inspect_inputfile, 'r')
-        print(f'File information:\n{hdf5file}')
-        # TODO(JP): handle case when table does not exist.
-        table = hdf5file.root.messer_timeseries
+
+def inspect_data_file():
+    if not os.path.isfile(ARGS.inspect_inputfile):
+        sys.exit('Not a file: %s' % (ARGS.inspect_inputfile, ))
+
+    import tables
+
+    with tables.open_file(ARGS.inspect_inputfile, 'r') as hdf5file:
+        try:
+            table = hdf5file.root.messer_timeseries
+        except tables.exceptions.NoSuchNodeError:
+            log.info('HDF5 file details:\n%s', hdf5file)
+            log.error('Could not find /messer_timeseries object. Exit.')
+            sys.exit(1)
+
         print(
-            f'Table information:\n'
-            f'  Invocation time (local): {table.attrs.invocation_time_local}\n'
+            f'Measurement meta data:\n'
             f'  System hostname: {table.attrs.system_hostname}\n'
+            f'  Invocation time (local): {table.attrs.invocation_time_local}\n'
             f'  PID command: {table.attrs.messer_pid_command}\n'
-            #f'  PID: {table.attrs.messer_pid}\n'
-            f'  Messer schema version: {table.attrs.messer_schema_version}\n'
-            f'  Number of rows: {table.nrows}\n'
-        )
-        print(f"Last row's (local) time: {table[-1]['isotime_local'].decode('ascii')}")
-        print('Column names:\n  %s' % ('\n  '.join(c for c in table.colnames)))
-        hdf5file.close()
-        sys.exit(0)
-
-    lazy_load_big_packages()
-
-    dataframe_label_pairs = []
-    for filepath, series_label in ARGS.series:
-        dataframe_label_pairs.append(
-            (parse_datafile_into_dataframe(filepath), series_label)
+            f'  PID: {table.attrs.messer_pid}\n'
+            #f'  Messer schema version: {table.attrs.messer_schema_version}\n'
         )
 
-    # Translate each `--column ....` argument into a dictionary.
-    column_dicts = []
-    keys = ('column_name', 'y_label', 'plot_title', 'rolling_wdw_width_seconds')
-    for values in ARGS.column:
-        # TODO: add check that rolling_wdw_width_seconds is an integer.
-        column_dicts.append(dict(zip(keys, values)))
+        frlt = table[0]['isotime_local'].decode('ascii')
+        lrlt = table[-1]['isotime_local'].decode('ascii')
+        npoints = table.nrows * len(table.colnames)
 
-    for column_dict in column_dicts:
-        plot_column_multiple_subplots(dataframe_label_pairs, column_dict)
+        print(f'Table properties:')
+        print(f'  Number of rows: {table.nrows}')
+        print(f'  Number of columns: {len(table.colnames)}')
+        print(f'  Number of data points (rows*columns): {npoints:.2E}')
+        print(f"  First row's (local) time: {frlt}")
+        print(f"  Last  row's (local) time: {lrlt}")
+        print('  Time span: %s' % (pretty_timedelta(
+            datetime.fromtimestamp(table[-1]['unixtime']) -
+            datetime.fromtimestamp(table[0]['unixtime'])
+        ), ))
 
-    plt.show()
+        print('\nColumn names:\n  %s' % ('\n  '.join(c for c in table.colnames)))
 
 
 def lazy_load_big_packages():
@@ -159,7 +228,252 @@ def lazy_load_big_packages():
     plt.style.use('ggplot')
 
 
+def cmd_magic():
+    # Note(JP): using --tail / --head / --first / --last can also be used to
+    # speed up parsing.
+    # dataframe = parse_hdf5file_into_dataframe(ARGS.datafile_for_magicplot)
+
+    # https://stackoverflow.com/questions/46493567/how-to-read-nrows-from-pandas-hdf-storage
+    # https://github.com/pandas-dev/pandas/issues/11188
+    # and this duplicate: https://github.com/pandas-dev/pandas/issues/14568
+    #
+    # and my solution attempt: https://github.com/pandas-dev/pandas/pull/26818
+    #
+
+    def get_table_metadata():
+        import tables
+        # Rely on this being a valid HDF5 file.
+        with tables.open_file(ARGS.datafile_for_magicplot, 'r') as hdf5file:
+            table = hdf5file.root.messer_timeseries
+            table_metadata = copy.copy(table.attrs)
+
+        return table_metadata
+
+    dataframe = parse_hdf5file_into_dataframe(
+        ARGS.datafile_for_magicplot,
+        #startrow=ARGS.tail,
+        #stoprow=ARGS.head,
+        first=ARGS.first,
+        last=ARGS.last
+    )
+
+    metadata = get_table_metadata()
+
+    fig, custom_tight_layout_func = plot_magic(dataframe, metadata)
+
+    # Apply custom "tight layout" routine after resize. This is when the user
+    # actually resizes the figure window or, more importantly, upon first draw
+    # where the window might be resized to screen dimensions. In some cases this
+    # is required for the initial figure to be displayed nicely. In the future
+    # the returned callback ID could be used to disconnect, i.e. to make this a
+    # one-time operation (if that turns out to be required).
+    _ = fig.canvas.mpl_connect('resize_event', custom_tight_layout_func)
+
+    plt.show()
+
+
+def plot_magic(dataframe, metadata):
+    """
+    Create a single figure with multiple subplots. Each subplot comes from a
+    different column in the same dataframe.
+    """
+
+    column_dicts = [
+        {
+            'column_name': 'proc_util_percent_total',
+            'y_label': 'Process CPU util (total) %',
+            'plot_title': 'foo',
+            'rolling_wdw_width_seconds': 5,
+        },
+        {
+            'column_name': 'proc_io_read_rate_hz',
+            'y_label': 'Process read() rate [Hz]',
+            'plot_title': 'foo',
+            'rolling_wdw_width_seconds': 5,
+            'yscale': 'symlog'
+        },
+        {
+            'column_name': 'proc_io_write_rate_hz',
+            'y_label': 'Process write() rate [Hz]',
+            'plot_title': 'foo',
+            'rolling_wdw_width_seconds': 5,
+            'yscale': 'symlog'
+        },
+        {
+            'column_name': 'proc_io_write_throughput_mibps',
+            'y_label': 'Process write() tp [MiB/s]',
+            'plot_title': 'foo',
+            'rolling_wdw_width_seconds': 5,
+            'yscale': 'symlog'
+        },
+        {
+            'column_name': 'system_loadavg1',
+            'y_label': 'System 1 min load avg',
+            'plot_title': 'foo',
+            'rolling_wdw_width_seconds': 0
+        }
+    ]
+
+    # Dynamically add columns based on args.
+        # {
+        #     'column_name': 'disk_xvda1_util_percent',
+        #     'y_label': 'xvda1 util %',
+        #     'plot_title': 'foo',
+        #     'rolling_wdw_width_seconds': 5
+        # },
+        # {
+        #     'column_name': 'disk_xvda1_write_latency_ms',
+        #     'y_label': 'xvda1 wl [ms]',
+        #     'plot_title': 'foo',
+        #     'rolling_wdw_width_seconds': 5
+        # },
+
+    # Note(JP): this is a quick workaround to populate properties required in
+    # code path downstream.
+    ARGS.normalization_factor = 0
+    ARGS.legend_loc = None
+    ARGS.custom_y_limit = None
+
+    column_count = len(column_dicts)
+
+    # Create a new figure.
+    plt.figure()
+
+    # Defaults are 6.4x4.8 inches at 100 dpi, make canvas significantly larger
+    # so that more details can be shown. But... vertically! :)
+    # Make vertical size dependent on column count.
+    figure_height_inches = 2.28 * column_count
+
+    fig = plt.gcf()
+    fig.set_size_inches(12, figure_height_inches)
+
+    fig.text(
+        0.5, 0.985,
+        f'Messer time series ({metadata.invocation_time_local})',
+        verticalalignment='center',
+        horizontalalignment='center',
+        fontsize=13
+    )
+
+    fig.text(
+        0.5, 0.970,
+        f'hostname: {metadata.system_hostname}, PID command: {metadata.messer_pid_command}',
+        verticalalignment='center',
+        horizontalalignment='center',
+        fontsize=10,
+        color='gray'
+    )
+
+    # Subplot structure: one column, and as many rows as data columns. Create a
+    # set of (empty) subplots at once; with a shared x axis (x tick labels are
+    # hidden except at the bottom). From the "Creating adjacent subplots" demo
+    # in the mpl docs. `subplots()` returns a list of Axes objects. Each Axes
+    # object can later be `.plot()`ted on.
+
+    axs = fig.subplots(column_count, 1, sharex=True)
+
+    if column_count == 1:
+        axs = [axs]
+
+    # common_y_limit = None
+    # if ARGS.samescale:
+
+    #     maxval_across_series = max(
+    #         df[column_dict['column_name']].max() for df, _ in \
+    #         dataframe_label_pairs
+    #     )
+
+    #     minval_across_series = min(
+    #         df[column_dict['column_name']].min() for df, _ in \
+    #         dataframe_label_pairs
+    #     )
+
+    #     diff = maxval_across_series - minval_across_series
+    #     common_y_limit = (
+    #         minval_across_series - 0.09 * diff,
+    #         maxval_across_series + 0.09 * diff
+    #     )
+
+    # Note(JP): with the `sharex` behavior above it seems like the order of
+    # subplots created determines the xlimits set for _all_ subplots. That is,
+    # for example, if the last subplot shows a time series that is shorter than
+    # the previous subplots then this takes precedence and the other time series
+    # are shown only partially. Make sure that all data is shown! Find smallest
+    # and biggest timestamps across all series and use those values as x limit,
+    # for all plots, making sure that all data is shown.
+    mintime_across_series = dataframe.index[0]
+    maxtime_across_series = dataframe.index[-1]
+    diff = maxtime_across_series - mintime_across_series
+    common_x_limit = (
+        mintime_across_series - 0.03 * diff,
+        maxtime_across_series + 0.03 * diff
+    )
+
+    # Plot individual subplots.
+    for idx, column_dict in enumerate(column_dicts, 1):
+        series = dataframe[column_dict['column_name']]
+
+        plotsettings = {}
+
+        plotsettings['show_y_label'] =  True
+
+        # Plot y axis label only at central subplot.
+        #plotsettings['show_y_label'] = \
+        #    True if idx == math.ceil(dataframe_count/2) else False
+
+        # Show legend only in first row (by default, can be modified)
+        #plotsettings['show_legend'] = True #  if idx == ARGS.show_legend_in_plot else False
+        plotsettings['show_legend'] = True  if idx == 1 else False
+        plotsettings['series_label'] = ''
+
+        plotsettings['xlim'] = common_x_limit
+
+        #if common_y_limit is not None:
+        #    plotsettings['ylim'] = common_y_limit
+
+        plot_subplot(axs[idx-1], column_dict, series, plotsettings)
+
+    # Align the subplots a little nicer, make more use of space. `hspace`: The
+    # amount of height reserved for space between subplots, expressed as a
+    # fraction of the average axis height.
+
+    # Note that `tight_layout` does not consider `fig.suptitle()`. Also see
+    # https://stackoverflow.com/a/45161551/145400
+    #plt.subplots_adjust(
+    #    hspace=0.05 left=0.05, right=0.97, bottom=0.1, top=0.95)
+    #plt.tight_layout()
+
+    # Note that subplots_adjust must be called after any calls to tight_layout,
+    # or there will be no effect of calling subplots_adjust. Also see
+    # https://stackoverflow.com/a/8248506/145400
+
+
+    def custom_tight_layout_func(event=None):
+        """This function can be called as a callback in response to matplotlib
+        events such as a window resize event.
+        """
+        plt.tight_layout(rect=[0, 0, 1, 0.97])
+        # hspace controls the _vertical_ space between subplots.
+        plt.subplots_adjust(hspace=0.019)
+
+    custom_tight_layout_func()
+
+    #plt.tight_layout()
+
+    savefig(column_dict['plot_title'])
+
+    # Return matplotlib figure object for further processing for interactive
+    # mode.
+    return fig, custom_tight_layout_func
+
+
 def plot_column_multiple_subplots(dataframe_label_pairs, column_dict):
+    """
+    Create a single figure with multiple subplots. There two modes:
+
+    - each subplot comes from the same column in different dataframes (old)
+    - each subplot comes from a different column in the same dataframe (new)
+    """
 
     dataframe_count = len(dataframe_label_pairs)
 
@@ -193,6 +507,7 @@ def plot_column_multiple_subplots(dataframe_label_pairs, column_dict):
     # hidden except at the bottom). From the "Creating adjacent subplots" demo
     # in the mpl docs. `subplots()` returns a list of Axes objects. Each Axes
     # object can later be `.plot()`ted on.
+
     axs = fig.subplots(dataframe_count, 1, sharex=True)
 
     if dataframe_count == 1:
@@ -217,6 +532,21 @@ def plot_column_multiple_subplots(dataframe_label_pairs, column_dict):
             maxval_across_series + 0.09 * diff
         )
 
+    # Note(JP): with the `sharex` behavior above it seems like the order of
+    # subplots created determines the xlimits set for _all_ subplots. That is,
+    # for example, if the last subplot shows a time series that is shorter than
+    # the previous subplots then this takes precedence and the other time series
+    # are shown only partially. Make sure that all data is shown! Find smallest
+    # and biggest timestamps across all series and use those values as x limit,
+    # for all plots, making sure that all data is shown.
+    mintime_across_series = min(df.index[0] for df, _ in dataframe_label_pairs)
+    maxtime_across_series = max(df.index[-1] for df, _ in dataframe_label_pairs)
+    diff = maxtime_across_series - mintime_across_series
+    common_x_limit = (
+        mintime_across_series - 0.03 * diff,
+        maxtime_across_series + 0.03 * diff
+    )
+
     # Plot individual subplots.
     for idx, (dataframe, series_label) in enumerate(dataframe_label_pairs, 1):
 
@@ -231,6 +561,8 @@ def plot_column_multiple_subplots(dataframe_label_pairs, column_dict):
         # Show legend only in first row (by default, can be modified)
         plotsettings['show_legend'] = True if idx == ARGS.show_legend_in_plot else False
         plotsettings['series_label'] = series_label
+
+        plotsettings['xlim'] = common_x_limit
 
         if common_y_limit is not None:
             plotsettings['ylim'] = common_y_limit
@@ -306,14 +638,32 @@ def plot_subplot(ax, column_dict, series, plotsettings):
             #markeredgecolor='gray'
             )
 
+    if 'yscale' in column_dict:
+        if column_dict['yscale'] == 'symlog':
+            if 'ylim' not in plotsettings:
+                log.info('symlog: set lower ylim to 0')
+                # Make sure to show the lower end, the zero, by default.
+                _prevmax = ax.get_ylim()[1]
+                ax.set_ylim((0, _prevmax * 1.4))
+            # https://github.com/matplotlib/matplotlib/issues/7008
+            # https://github.com/matplotlib/matplotlib/issues/10369
+            ax.set_yscale(
+                'symlog',
+                linthreshy=1,
+                linscaley=0.25,
+                subsy=[2, 3, 4, 5, 6, 7, 8, 9]
+            )
+        else:
+            ax.set_yscale(column_dict['yscale'])
+
     # With `subplots()` sharex option this can be set for all subplots.
-    ax.set_xlabel('Time (UTC)', fontsize=12)
+    ax.set_xlabel('Time (UTC)', fontsize=10)
 
     if plotsettings['show_y_label']:
         # If no custom y label was provided fall back to using series name.
         ax.set_ylabel(
             column_dict['y_label'] if column_dict['y_label'] else series.name,
-            fontsize=12
+            fontsize=9
         )
 
     # The legend story is shitty with pandas intertwined w/ mpl.
@@ -321,12 +671,18 @@ def plot_subplot(ax, column_dict, series, plotsettings):
     if plotsettings['show_legend']:
         legend = ['raw samples']
         if window_width_seconds != 0:
-            legend.append('%s s rolling window average' % window_width_seconds)
+            legend.append('%s s rolling window mean' % window_width_seconds)
         ax.legend(
             legend,
             numpoints=4,
             loc=ARGS.legend_loc if ARGS.legend_loc else 'best'
         )
+
+    ax.set_xlim(plotsettings['xlim'])
+
+    # https://stackoverflow.com/a/11386056/145400
+    ax.tick_params(axis='x', which='major', labelsize=8)
+    ax.tick_params(axis='y', which='major', labelsize=8)
 
     if 'ylim' in plotsettings:
 
@@ -337,6 +693,7 @@ def plot_subplot(ax, column_dict, series, plotsettings):
         if nf != 0:
             ylim = ylim[0] / nf, ylim[1] / nf
 
+        log.info('set custom y lim')
         ax.set_ylim(ylim)
 
     # A custom Y limit takes precedence over the limit set above.
@@ -353,41 +710,67 @@ def plot_subplot(ax, column_dict, series, plotsettings):
     )
 
 
-def parse_datafile_into_dataframe(datafilepath):
+def parse_hdf5file_into_dataframe(
+        filepath, startrow=None, stoprow=None, first=None, last=None):
 
-    log.info('Read data from from: %s', datafilepath)
+    # df = pd.read_csv(
+    #     datafilepath,
+    #     comment='#',
+    #     index_col=0
+    # )
 
-    try:
-        df = pd.read_csv(
-            datafilepath,
-            comment='#',
-            index_col=0
-        )
-    except ValueError as e:
-        log.debug('Falling back to HDF parsing, CSV parsing failed: %s', e)
-        df = pd.read_hdf(datafilepath, key='messer_timeseries')
+    log.info('Read data from HDF5 file: %s', filepath)
 
-    # Parse Unix timestamps into a DateTimeIndex object and replace the
-    # dataframe's index (integers) with the new one.
+    # Note(JP): the `start` and `stop` approach may speed up reading very large
+    # HDF5 files, but requires https://github.com/pandas-dev/pandas/pull/26818/
+    # to be addressed. Note that for a 60 MB (compressed) HDF5 file with 10 days
+    # worth of time series data the parsing takes 2 seconds on my machine. That
+    # is, using `start` and `stop` may only save about that much (1-2 seconds)
+    # of processing time and a bit of memory. That is, this technique only
+    # becomes meaningful for O(GB)-sized (compressed) HDF5 files.
+    df = pd.read_hdf(
+        filepath,
+        key='messer_timeseries',
+        #start=startrow,
+        #stop=stoprow,
+    )
+
+    # Parse Unix timestamps into a `pandas.DateTimeIndex` object and replace the
+    # DataFrame's index (integers) with the new one.
+    log.info("Convert `unixtime` column to pandas' timestamps")
     timestamps = pd.to_datetime(df['unixtime'], unit='s')
     df.index = timestamps
-    log.info('Number of samples: %s', len(df))
+
+    log.info('Number of samples (rows): %s', len(df))
 
     log.info('Check monotonicity of time index')
-    for i, t in enumerate(timestamps[1:]):
-        t_previous = timestamps[i]
-        if t < t_previous:
-            delta = t_previous - t
-            log.warning(
-                'log not monotonic at sample number %s (delta: %s)',
-                i,
-                delta
-            )
+    if not df.index.is_monotonic_increasing:
+        log.warning('Index not monotonic. Looking deeper.')
+        # Note(JP): can probably be built faster.
+        for i, t in enumerate(timestamps[1:]):
+            t_previous = timestamps[i]
+            if t < t_previous:
+                delta = t_previous - t
+                log.warning(
+                    'log not monotonic at sample number %s (delta: %s)',
+                    i,
+                    delta
+                )
 
-    starttime = timestamps.iloc[0]
-    log.info('Starttime (UTC): %s', starttime)
-    timespan = timestamps.iloc[-1] - starttime
-    log.info('Time span: %r', pretty_timedelta(timespan))
+    if first:
+        log.info('Analyze only the first part of time series, offset: %s', first)
+        df = df.first(first)
+        assert not last, 'both must not be provided'
+
+    if last:
+        log.info('Analyze only the last part of time series, offset: %s', last)
+        df = df.last(last)
+        assert not first, 'both must not be provided'
+
+    starttime = df.index[0]
+    log.info('Time series start time (UTC): %s', starttime)
+    timespan = df.index[-1] - starttime
+    log.info('Time series time span: %r', pretty_timedelta(timespan))
 
     return df
 
@@ -417,11 +800,11 @@ def pretty_timedelta(timedelta):
     hours, seconds = divmod(seconds, 3600)
     minutes, seconds = divmod(seconds, 60)
     if days > 0:
-        return '%dd%dh%dm%ds' % (days, hours, minutes, seconds)
+        return '%dd %dh %dm %ds' % (days, hours, minutes, seconds)
     elif hours > 0:
-        return '%dh%dm%ds' % (hours, minutes, seconds)
+        return '%dh %dm %ds' % (hours, minutes, seconds)
     elif minutes > 0:
-        return '%dm%ds' % (minutes, seconds)
+        return '%dm %ds' % (minutes, seconds)
     else:
         return '%ds' % (seconds,)
 
