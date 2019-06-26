@@ -17,7 +17,8 @@ Highlights:
 - Messer writes the measured quantities over time (time series data!) as
   structured data into a HDF5 file, and automatically annotates the output file
   with relevant metadata such as program invocation time, system hostname,
-  Messer software version,
+  Messer software version
+- Messer provides a time series analysis and plotting tool.
 
 Messer values measurement correctness very highly. Some aspects:
 
