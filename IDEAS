@@ -9,7 +9,6 @@
 
 - For the magic plot allow for a non-interactive mode which only writes to disk.
 
-
 Ideas for walk-through / tutorial / blog:
 
 - Show how PID command picks up new PID

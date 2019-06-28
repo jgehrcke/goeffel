@@ -36,8 +36,9 @@ Messer values measurement correctness very highly. Some aspects:
 
 ## Motivation
 
-This was born out of a need for solid tooling. We started with pidstat from
-sysstat, launched in the following manner:
+This was born out of a need for solid tooling. We started with [pidstat from
+sysstat](https://github.com/sysstat/sysstat/blob/master/pidstat.c), launched in
+the following manner:
 
 ```
 pidstat -hud -p $PID 1 1
@@ -48,21 +49,24 @@ same process, and that various issues in that regard exist in this program
 across various versions (see
 [here](https://github.com/sysstat/sysstat/issues/73#issuecomment-349946051),
 [here](https://github.com/sysstat/sysstat/commit/52977c479), and
-[here](https://github.com/sysstat/sysstat/commit/a63e87996))
+[here](https://github.com/sysstat/sysstat/commit/a63e87996)).
 
 The program [cpustat](https://github.com/uber-common/cpustat) open-sourced by
 Uber has a delightful README about the general measurement methodology and
 overall seems to be a great tool. However, it seems to be optimized for
-interactive usage and the user experience and the methodology around persisting
-the collected timeseries data seems to be fishy and undocumented. It can write a
-binary file when using `-cpuprofile` but it is a little unclear what this file
-contains and how to analyze the data.
+interactive usage (whereas we were looking for a robust measurement program
+which can be pointed at a process and then be left unattended for a significant
+while) and there does not seem to be a decent approach towards persisting the
+collected timeseries data on disk for later inspection (`cpustat` seems to be
+able to write a binary file when using `-cpuprofile` but it is a little unclear
+what this file contains and how to analyze the data).
 
 The program [psrecord](https://github.com/astrofrog/psrecord) (which effectively
-wraps psutil) has the same fundamental idea as this code here; it however does
-not have a clear separation of concerns in the code between persisting the data
-to disk, performing the measurements themselves, and plotting the data,
-rendering it not production-ready for our concerns.
+wraps [psutil](https://psutil.readthedocs.io/en/latest/)) has the same
+fundamental idea as this code here; it however does not have a clear separation
+of concerns between persisting the data to disk, performing the measurement
+itself, and plotting the data, rendering it not production-ready for our
+concerns.
 
 
 ### Measurands (columns, and their units)
