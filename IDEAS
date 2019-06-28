@@ -7,10 +7,6 @@
 - File management in general: prevent accidental concurrent write access.
   Simple: check if file exists. More complex: file locking.
 
-- For plotting, wherever it makes sense: allow for selecting the first() or
-  last() parts of a time series, or use tail() or head() to use a row count.
-  I think this makes sense especially for the `magic` command.
-
 - For the magic plot allow for a non-interactive mode which only writes to disk.
 
 
