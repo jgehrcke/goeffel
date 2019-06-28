@@ -37,7 +37,7 @@ from datetime import datetime, timedelta
 
 logfmt = "%(asctime)s.%(msecs)03d %(name)s %(levelname)s: %(message)s"
 datefmt = "%y%m%d-%H:%M:%S"
-logging.basicConfig(format=logfmt, datefmt=datefmt, level=logging.INFO)
+logging.basicConfig(format=logfmt, datefmt=datefmt, level=logging.DEBUG)
 log = logging.getLogger()
 
 
@@ -53,6 +53,7 @@ def main():
         inspect_data_file()
         sys.exit(0)
 
+    log.debug('Import packages')
     lazy_load_big_packages()
 
     if ARGS.command == 'magic':
