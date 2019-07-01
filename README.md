@@ -95,9 +95,19 @@ Note(JP): rename to `proc_disk_read_throughput_mibps`?
 ## Notes
 
 - Messer does not asymmetrically hide measurement uncertainty. For example, you
-  might see it measure a CPU utilization of a single-threaded process slightly
-  larger than 100 %. That's simply the measurement error. In other tooling such
-  as `sysstat` it seems to be common practice to _asymmetrically_ hide
-  measurement uncertainty by capping values when they are known to in theory not
-  exceed a certain threshold
+- Messer tries to not asymmetrically hide measurement uncertainty. For example,
+  you might see it measure a CPU utilization of a single-threaded process
+  slightly larger than 100 %. That's simply the measurement error. In other
+  tooling such as `sysstat` it seems to be common practice to _asymmetrically_
+  hide measurement uncertainty by capping values when they are known to in
+  theory not exceed a certain threshold
   ([example](https://github.com/sysstat/sysstat/commit/52977c479d3de1cb2535f896273d518326c26722)).
+
+
+## Valuable resources
+
+- http://www.brendangregg.com/usemethod.html
+- https://elinux.org/Kernel_Timer_Systems
+- https://github.com/Leo-G/DevopsWiki/wiki/How-Linux-CPU-Usage-Time-and-Percentage-is-calculated
+- https://github.com/uber-common/cpustat/blob/master/README.md
+-
