@@ -1,38 +1,43 @@
 # Messer
 
-This program measures the resource utilization of a specific process at a
-specific sampling rate.
+Measures the resource utilization of a specific process over time.
 
-In addition to sampling process-specific data, this program also measures the
-utilization of system-wide resources making it straightforward to put the
-process-specific metrics into context.
+Built for Linux..
+
+In addition to sampling process-specific data this program also measures the
+utilization / saturation / error rate of system-wide resources making it
+straightforward to put the process-specific metrics into context.
 
 Highlights:
 
-- High sampling frequency: 2 Hz
-- Optimized for correct measurement, also under load.
-- Messer can follow a process subject to process ID changes. This is useful when
-  the process you want to observe is expected to occasionally restart. For that
-  to work you need to provide a command which reliably resolves the new process
-  ID, for example with `--pid-command "pgrep supertool"`.
-- Messer writes the measured quantities over time (time series data!) into an
-  [HDF5](https://en.wikipedia.org/wiki/Hierarchical_Data_Format) file, and
-  automatically annotates the output file with relevant metadata such as program
-  invocation time, system hostname, Messer software version.
-- Messer comes with a data plotting tool, separate from the data acquisition
-  program.
+- High sampling rate.
+
+- Can inspect a program subject to process ID changes. This is useful for
+  longevity experiments when the program you want to monitor is expected to
+  occasionally restart (for instance as of fail-over scenarios).
+
+- Messer helps keeping the data organized: the time series data is written into
+  an [HDF5](https://en.wikipedia.org/wiki/Hierarchical_Data_Format) file (
+  annotate with relevant metadata such as program invocation time, system
+  hostname, and Messer software version).
+
+- Messer comes with a data plotting tool (separate from the data acquisition
+  program).
 
 Messer values measurement correctness very highly. Some aspects:
 
-- It uses a sampling interval of 0.5 seconds (by default) for making narrow
-  spikes visible.
+- It uses a sampling interval of 0.5 seconds for making narrow spikes visible.
+  Note: the highest meaningful sampling rate is limited by the kernel's timer
+  and bookkeeping system.
+
 - The core sampling loop does little work besides the measurement itself.
+
 - The measurement process which runs the core sampling loop writes each sample
-  to a queue which serves as an in-memory buffer). Messer uses a separate
-  process for consuming this queue and for emitting time series data for later
-  inspection (that is, measurement is decoupled from data emission, making the
-  sampling rate more predictable when persisting data on disk, or generally upon
-  backpressure).
+  to a queue. Messer uses a separate process for consuming this queue and for
+  emitting the time series data for later inspection (that is, the measurement
+  is decoupled from persisting the data via an in-memory buffer, making the
+  sampling rate more predictable upon disk write latency spikes, or generally
+  upon backpressure).
 
 ## Motivation
 
@@ -57,7 +62,7 @@ overall seems to be a great tool. However, it seems to be optimized for
 interactive usage (whereas we were looking for a robust measurement program
 which can be pointed at a process and then be left unattended for a significant
 while) and there does not seem to be a decent approach towards persisting the
-collected timeseries data on disk for later inspection (`cpustat` seems to be
+collected time series data on disk for later inspection (`cpustat` seems to be
 able to write a binary file when using `-cpuprofile` but it is a little unclear
 what this file contains and how to analyze the data).
 
