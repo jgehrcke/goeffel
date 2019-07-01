@@ -12,6 +12,9 @@
 - Note that this program must be run as root (in docs) and also generate nice
   error messages around that.
 
+- Make sampling interval configurable (also implement a meaningful minimum; i.e.
+  maximum rate).
+
 Ideas for walk-through / tutorial / blog:
 
 - Show how PID command picks up new PID

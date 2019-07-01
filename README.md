@@ -94,7 +94,6 @@ Note(JP): rename to `proc_disk_read_throughput_mibps`?
 
 ## Notes
 
-- Messer does not asymmetrically hide measurement uncertainty. For example, you
 - Messer tries to not asymmetrically hide measurement uncertainty. For example,
   you might see it measure a CPU utilization of a single-threaded process
   slightly larger than 100 %. That's simply the measurement error. In other
@@ -106,8 +105,24 @@ Note(JP): rename to `proc_disk_read_throughput_mibps`?
 
 ## Valuable resources
 
+### About system performance measurement, and kernel time bookkeeping
+
 - http://www.brendangregg.com/usemethod.html
+- https://github.com/uber-common/cpustat/blob/master/README.md
 - https://elinux.org/Kernel_Timer_Systems
 - https://github.com/Leo-G/DevopsWiki/wiki/How-Linux-CPU-Usage-Time-and-Percentage-is-calculated
-- https://github.com/uber-common/cpustat/blob/master/README.md
--
+
+
+### About disk I/O statistics
+
+- https://www.xaprb.com/blog/2010/01/09/how-linux-iostat-computes-its-results/
+- https://www.kernel.org/doc/Documentation/iostats.txt
+- https://blog.serverfault.com/2010/07/06/777852755/ (interpreting iostat output)
+- https://unix.stackexchange.com/a/462732 (What are merged writes?)
+- https://stackoverflow.com/a/8512978 (what is`%util` in iostat?)
+- https://coderwall.com/p/utc42q/understanding-iostat
+- https://www.percona.com/doc/percona-toolkit/LATEST/pt-diskstats.html
+
+### Others
+
+- https://serverfault.com/a/85481/121951 (about system memory statistics)
