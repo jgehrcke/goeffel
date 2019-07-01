@@ -67,7 +67,6 @@ COLUMN_PLOT_CONFIGS = {
         'yscale': 'symlog'
     },
     'system_loadavg1': {
-        'column_name': ,
         'y_label': 'System 1 min load avg',
         'plot_title': 'foo',
         'rolling_wdw_width_seconds': 0
@@ -85,7 +84,7 @@ COLUMN_PLOT_CONFIGS = {
 }
 
 
-# Global, populated by `parse_cmdline_args()`.
+# Populated by `parse_cmdline_args()`.
 ARGS = None
 
 
@@ -98,8 +97,11 @@ def main():
         inspect_data_file()
         sys.exit(0)
 
-    log.debug('Import packages')
+    # Importing matplotlib is slow. Defer until it known that it is needed.
+    log.debug('Import big packages')
     lazy_load_big_packages()
+
+    print(ARGS)
 
     if ARGS.command == 'magic':
         cmd_magic()
@@ -338,7 +340,7 @@ def plot_magic(dataframe, metadata):
     ARGS.legend_loc = None
     ARGS.custom_y_limit = None
 
-    column_count = len(column_dicts)
+    column_count = len(columns_to_plot)
 
     # Create a new figure.
     plt.figure()
@@ -469,7 +471,7 @@ def plot_magic(dataframe, metadata):
 
     #plt.tight_layout()
 
-    savefig(column_dict['plot_title'])
+    savefig(f'messer_magicplot_{metadata.system_hostname}_{metadata.invocation_time_local}')
 
     # Return matplotlib figure object for further processing for interactive
     # mode.
