@@ -825,10 +825,12 @@ def generate_samples(pid):
         diskstats1 = diskstats2
         t_rel1 = t_rel2
 
-        # provide the newly acquired sample to the consumer of this generator.
+        # Provide the newly acquired sample to the consumer of this generator.
         yield sampledict
 
-        # Wait (approximately) for the configured sampling interval.
+        # Wait approximately for the configured sampling interval. Deviations
+        # from the desired value do not contribute to the measurement error; the
+        # exact duration is measured by the sampling loop.
         time.sleep(SAMPLE_INTERVAL_SECONDS)
 
 
@@ -866,11 +868,11 @@ def calc_diskstats(delta_t, s1, s2):
         # Also see https://www.kernel.org/doc/Documentation/iostats.txt
         #
         # Use psutil's `write_time` which is documented with "time spent writing
-        # to disk (in milliseconds)", extracted from field 8 in /proc/diskstats,
-        # see. And use psutil's `write_count` which is extracted from field 5 in
+        # to disk (in milliseconds)", extracted from field 8 in /proc/diskstats.
+        # Use psutil's `write_count` which is extracted from field 5 in
         # /proc/diststats. Notably, it is *not* the merged write count, but the
         # user space write count. Which seems to be what iostat uses for
-        # calculating w_await.
+        # calculating `w_await`.
         #
         # In an experiment I have seen that the following can happen within a
         # second of real time: (observed via `iostat -x 1 | grep xvdh` and via
@@ -888,7 +890,7 @@ def calc_diskstats(delta_t, s1, s2):
         # interval: emitting a latency of '0' is misleading. It's common to
         # store a NaN/Null/None in that case, but that's not easily supported by
         # the HDF5 file format. Instead, store -1, with the convention that this
-        # value means precisely "no writes/reads happened here.
+        # value means precisely "no writes/reads happened here".
         delta_write_count = s2[dev].write_count - s1[dev].write_count
         if delta_write_count == 0:
             avg_write_latency_ms = -1
@@ -905,11 +907,11 @@ def calc_diskstats(delta_t, s1, s2):
 
         # ## IO request rate, merged by kernel (what the device sees).
         #
-        # On Linux what matters more than the user space read or write request
-        # rate, is the _merged_ read or write request rate (the kernel attempts
-        # to merge individual user space requests before passing them to the
-        # hardware). For non-random I/O patterns this greatly reduces the of
-        # individual reads and writes issed to disk.
+        # On Linux what matters at least as much as user space read or write
+        # request rate, is the _merged_ read or write request rate (the kernel
+        # attempts to merge individual user space requests before passing them
+        # to the hardware). For non-random I/O patterns this greatly reduces the
+        # of individual reads and writes issed to disk.
         sampledict['disk_' + dev + '_merged_write_rate_hz'] = \
             (s2[dev].write_merged_count - s1[dev].write_merged_count) / delta_t
         sampledict['disk_' + dev + '_merged_read_rate_hz'] = \
