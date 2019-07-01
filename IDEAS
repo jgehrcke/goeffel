@@ -16,4 +16,7 @@ Ideas for walk-through / tutorial / blog:
 - Show magic
 - Show non-interactive magic, writing PNG file
 
+Ideas for messer-analysis specifically:
+
+    - control log level with command line flag
 
