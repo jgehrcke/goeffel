@@ -9,34 +9,36 @@ process-specific metrics into context.
 
 Highlights:
 
-- High sampling frequency, measurement correctness also under load. See below.
+- High sampling frequency: 2 Hz
+- Optimized for correct measurement, also under load.
 - Messer can follow a process subject to process ID changes. This is useful when
-  the process you want to observe may occasionally restart (for that to work you
-  need to provide a command which reliably resolves the new process ID, for
-  example with `--pid-command "pgrep supertool"`).
-- Messer writes the measured quantities over time (time series data!) as
-  structured data into a HDF5 file, and automatically annotates the output file
-  with relevant metadata such as program invocation time, system hostname,
-  Messer software version
-- Messer provides a time series analysis and plotting tool.
+  the process you want to observe is expected to occasionally restart. For that
+  to work you need to provide a command which reliably resolves the new process
+  ID, for example with `--pid-command "pgrep supertool"`.
+- Messer writes the measured quantities over time (time series data!) into an
+  [HDF5](https://en.wikipedia.org/wiki/Hierarchical_Data_Format) file, and
+  automatically annotates the output file with relevant metadata such as program
+  invocation time, system hostname, Messer software version.
+- Messer comes with a data plotting tool, separate from the data acquisition
+  program.
 
 Messer values measurement correctness very highly. Some aspects:
 
-- It uses a sampling rate of 0.5 seconds (by default) making short spikes
-  visible.
+- It uses a sampling interval of 0.5 seconds (by default) for making narrow
+  spikes visible.
 - The core sampling loop does little work besides the measurement itself.
 - The measurement process which runs the core sampling loop writes each sample
-  to a queue (an in-memory buffer). Messer uses a separate process for consuming
-  this queue and for emitting time series data for later inspection (that is,
-  measurement is decoupled from data emission, making the sampling rate more
-  predictable when persisting data on disk, or generally upon backpressure).
-
-
+  to a queue which serves as an in-memory buffer). Messer uses a separate
+  process for consuming this queue and for emitting time series data for later
+  inspection (that is, measurement is decoupled from data emission, making the
+  sampling rate more predictable when persisting data on disk, or generally upon
+  backpressure).
 
 ## Motivation
 
-This was born out of a need for solid tooling. We started with pidstat from
-sysstat, launched in the following manner:
+This was born out of a need for solid tooling. We started with [pidstat from
+sysstat](https://github.com/sysstat/sysstat/blob/master/pidstat.c), launched in
+the following manner:
 
 ```
 pidstat -hud -p $PID 1 1
@@ -47,21 +49,24 @@ same process, and that various issues in that regard exist in this program
 across various versions (see
 [here](https://github.com/sysstat/sysstat/issues/73#issuecomment-349946051),
 [here](https://github.com/sysstat/sysstat/commit/52977c479), and
-[here](https://github.com/sysstat/sysstat/commit/a63e87996))
+[here](https://github.com/sysstat/sysstat/commit/a63e87996)).
 
 The program [cpustat](https://github.com/uber-common/cpustat) open-sourced by
 Uber has a delightful README about the general measurement methodology and
 overall seems to be a great tool. However, it seems to be optimized for
-interactive usage and the user experience and the methodology around persisting
-the collected timeseries data seems to be fishy and undocumented. It can write a
-binary file when using `-cpuprofile` but it is a little unclear what this file
-contains and how to analyze the data.
+interactive usage (whereas we were looking for a robust measurement program
+which can be pointed at a process and then be left unattended for a significant
+while) and there does not seem to be a decent approach towards persisting the
+collected timeseries data on disk for later inspection (`cpustat` seems to be
+able to write a binary file when using `-cpuprofile` but it is a little unclear
+what this file contains and how to analyze the data).
 
 The program [psrecord](https://github.com/astrofrog/psrecord) (which effectively
-wraps psutil) has the same fundamental idea as this code here; it however does
-not have a clear separation of concerns in the code between persisting the data
-to disk, performing the measurements themselves, and plotting the data,
-rendering it not production-ready for our concerns.
+wraps [psutil](https://psutil.readthedocs.io/en/latest/)) has the same
+fundamental idea as this code here; it however does not have a clear separation
+of concerns between persisting the data to disk, performing the measurement
+itself, and plotting the data, rendering it not production-ready for our
+concerns.
 
 
 ### Measurands (columns, and their units)

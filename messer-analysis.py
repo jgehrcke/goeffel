@@ -37,10 +37,54 @@ from datetime import datetime, timedelta
 
 logfmt = "%(asctime)s.%(msecs)03d %(name)s %(levelname)s: %(message)s"
 datefmt = "%y%m%d-%H:%M:%S"
-logging.basicConfig(format=logfmt, datefmt=datefmt, level=logging.INFO)
+logging.basicConfig(format=logfmt, datefmt=datefmt, level=logging.DEBUG)
 log = logging.getLogger()
 
 
+COLUMN_PLOT_CONFIGS = {
+    'proc_util_percent_total': {
+        'y_label': 'Process CPU util (total) [%]',
+        'plot_title': 'foo',
+        'rolling_wdw_width_seconds': 5,
+    },
+    'proc_io_read_rate_hz': {
+        'y_label': 'Process read() rate [Hz]',
+        'plot_title': 'foo',
+        'rolling_wdw_width_seconds': 5,
+        'yscale': 'symlog'
+    },
+    'proc_io_write_rate_hz': {
+        'y_label': 'Process write() rate [Hz]',
+        'plot_title': 'foo',
+        'rolling_wdw_width_seconds': 5,
+        'yscale': 'symlog'
+    },
+    'proc_io_write_throughput_mibps': {
+        'y_label': 'Process write() tp [MiB/s]',
+        'plot_title': 'foo',
+        'rolling_wdw_width_seconds': 5,
+        'yscale': 'symlog'
+    },
+    'system_loadavg1': {
+        'column_name': ,
+        'y_label': 'System 1 min load avg',
+        'plot_title': 'foo',
+        'rolling_wdw_width_seconds': 0
+    },
+    'disk_{DEVNAME}_util_percent': {
+        'y_label': '{DEVNAME} util [%]',
+        'plot_title': 'foo',
+        'rolling_wdw_width_seconds': 5
+    },
+    'disk_{DEVNAME}_write_latency_ms': {
+         'y_label': '{DEVNAME} wl [ms]',
+         'plot_title': 'foo',
+         'rolling_wdw_width_seconds': 5
+    },
+}
+
+
+# Global, populated by `parse_cmdline_args()`.
 ARGS = None
 
 
@@ -53,6 +97,7 @@ def main():
         inspect_data_file()
         sys.exit(0)
 
+    log.debug('Import packages')
     lazy_load_big_packages()
 
     if ARGS.command == 'magic':
@@ -278,55 +323,13 @@ def plot_magic(dataframe, metadata):
     different column in the same dataframe.
     """
 
-    column_dicts = [
-        {
-            'column_name': 'proc_util_percent_total',
-            'y_label': 'Process CPU util (total) %',
-            'plot_title': 'foo',
-            'rolling_wdw_width_seconds': 5,
-        },
-        {
-            'column_name': 'proc_io_read_rate_hz',
-            'y_label': 'Process read() rate [Hz]',
-            'plot_title': 'foo',
-            'rolling_wdw_width_seconds': 5,
-            'yscale': 'symlog'
-        },
-        {
-            'column_name': 'proc_io_write_rate_hz',
-            'y_label': 'Process write() rate [Hz]',
-            'plot_title': 'foo',
-            'rolling_wdw_width_seconds': 5,
-            'yscale': 'symlog'
-        },
-        {
-            'column_name': 'proc_io_write_throughput_mibps',
-            'y_label': 'Process write() tp [MiB/s]',
-            'plot_title': 'foo',
-            'rolling_wdw_width_seconds': 5,
-            'yscale': 'symlog'
-        },
-        {
-            'column_name': 'system_loadavg1',
-            'y_label': 'System 1 min load avg',
-            'plot_title': 'foo',
-            'rolling_wdw_width_seconds': 0
-        }
+    columns_to_plot = [
+        'proc_util_percent_total',
+        'proc_io_read_rate_hz',
+        'proc_io_write_rate_hz',
+        'proc_io_write_throughput_mibps',
+        'system_loadavg1',
     ]
-
-    # Dynamically add columns based on args.
-        # {
-        #     'column_name': 'disk_xvda1_util_percent',
-        #     'y_label': 'xvda1 util %',
-        #     'plot_title': 'foo',
-        #     'rolling_wdw_width_seconds': 5
-        # },
-        # {
-        #     'column_name': 'disk_xvda1_write_latency_ms',
-        #     'y_label': 'xvda1 wl [ms]',
-        #     'plot_title': 'foo',
-        #     'rolling_wdw_width_seconds': 5
-        # },
 
     # Note(JP): this is a quick workaround to populate properties required in
     # code path downstream.
@@ -410,12 +413,17 @@ def plot_magic(dataframe, metadata):
     )
 
     # Plot individual subplots.
-    for idx, column_dict in enumerate(column_dicts, 1):
-        series = dataframe[column_dict['column_name']]
+    for idx, column_name in enumerate(columns_to_plot, 1):
+        series = dataframe[column_name]
 
-        plotsettings = {}
+        # Column-specific plot config such as y label, largely depends on the
+        # metric itself.
+        column_plot_config = COLUMN_PLOT_CONFIGS[column_name]
 
-        plotsettings['show_y_label'] =  True
+        # Subplot-specific plot config, independent of the metric, mainly
+        # dependent on the position of the subplot.
+        subplotsettings = {}
+        subplotsettings['show_y_label'] =  True
 
         # Plot y axis label only at central subplot.
         #plotsettings['show_y_label'] = \
@@ -423,15 +431,15 @@ def plot_magic(dataframe, metadata):
 
         # Show legend only in first row (by default, can be modified)
         #plotsettings['show_legend'] = True #  if idx == ARGS.show_legend_in_plot else False
-        plotsettings['show_legend'] = True  if idx == 1 else False
-        plotsettings['series_label'] = ''
+        subplotsettings['show_legend'] = True  if idx == 1 else False
+        subplotsettings['series_label'] = ''
 
-        plotsettings['xlim'] = common_x_limit
+        subplotsettings['xlim'] = common_x_limit
 
         #if common_y_limit is not None:
         #    plotsettings['ylim'] = common_y_limit
 
-        plot_subplot(axs[idx-1], column_dict, series, plotsettings)
+        plot_subplot(axs[idx-1], column_plot_config, series, subplotsettings)
 
     # Align the subplots a little nicer, make more use of space. `hspace`: The
     # amount of height reserved for space between subplots, expressed as a
@@ -578,9 +586,9 @@ def plot_column_multiple_subplots(dataframe_label_pairs, column_dict):
     savefig(column_dict['plot_title'])
 
 
-def plot_subplot(ax, column_dict, series, plotsettings):
+def plot_subplot(ax, column_plot_config, series, plotsettings):
 
-    log.info('Plot column %s from %s', column_dict, series.name)
+    log.info('Plot column %s from %s', column_plot_config, series.name)
 
     # Set currently active axis to axis object handed over to this function.
     # That makes df.plot() add the data to said axis.
@@ -600,7 +608,7 @@ def plot_subplot(ax, column_dict, series, plotsettings):
 
     # Conditionally create a rolling window mean plot on top of the raw
     # samples.
-    window_width_seconds = int(column_dict['rolling_wdw_width_seconds'])
+    window_width_seconds = int(column_plot_config['rolling_wdw_width_seconds'])
     if window_width_seconds != 0:
 
         # The raw samples are insightful, especially for seeing the outliers in
@@ -638,8 +646,8 @@ def plot_subplot(ax, column_dict, series, plotsettings):
             #markeredgecolor='gray'
             )
 
-    if 'yscale' in column_dict:
-        if column_dict['yscale'] == 'symlog':
+    if 'yscale' in column_plot_config:
+        if column_plot_config['yscale'] == 'symlog':
             if 'ylim' not in plotsettings:
                 log.info('symlog: set lower ylim to 0')
                 # Make sure to show the lower end, the zero, by default.
@@ -654,7 +662,7 @@ def plot_subplot(ax, column_dict, series, plotsettings):
                 subsy=[2, 3, 4, 5, 6, 7, 8, 9]
             )
         else:
-            ax.set_yscale(column_dict['yscale'])
+            ax.set_yscale(column_plot_config['yscale'])
 
     # With `subplots()` sharex option this can be set for all subplots.
     ax.set_xlabel('Time (UTC)', fontsize=10)
@@ -662,7 +670,7 @@ def plot_subplot(ax, column_dict, series, plotsettings):
     if plotsettings['show_y_label']:
         # If no custom y label was provided fall back to using series name.
         ax.set_ylabel(
-            column_dict['y_label'] if column_dict['y_label'] else series.name,
+            column_plot_config['y_label'] if column_plot_config['y_label'] else series.name,
             fontsize=9
         )
 

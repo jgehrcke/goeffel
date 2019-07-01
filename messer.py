@@ -343,6 +343,10 @@ def process_outfile_args():
             sys.exit(f'Error: path exists: {path_csv}')
         log.info(f'Will write data file {path_csv}')
 
+    if path_csv:
+        # TODO(JP): properly validate / test CSV output.
+        raise NotImplementedError
+
     # Expose config to the rest of the program.
     OUTFILE_PATH_HDF5 = path_hdf5
     OUTFILE_PATH_CSV = path_csv
