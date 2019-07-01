@@ -63,24 +63,6 @@ fundamental idea as Messer; it however does not have a clear separation of
 concerns between persisting the data to disk, performing the measurement itself,
 and plotting the data, making it too error-prone and not production-ready.
 
-
-### Measurands (columns, and their units)
-
-The quantities intended to be measured.
-
-#### `proc_io_read_throughput_mibps` and `proc_io_write_throughput_mibps`
-
-Measures the disk I/O throughput of the inspected process, in `MiB/s`.
-
-Based on Linux' `/proc/<pid>/io` `rchar` and `wchar`
-
-> The number of bytes which this task has caused to be read from storage. This
-> is simply the sum of bytes which this process passed to read() and pread().
-> It includes things like tty IO and it is unaffected by whether or not actual
-> physical disk IO was required (the read might have been satisfied from
-> pagecache)
-
-
 ## Notes
 
 - Messer tries to not asymmetrically hide measurement uncertainty. For example,
@@ -105,7 +87,7 @@ About system performance measurement, and kernel time bookkeeping:
 - https://elinux.org/Kernel_Timer_Systems
 - https://github.com/Leo-G/DevopsWiki/wiki/How-Linux-CPU-Usage-Time-and-Percentage-is-calculated
 
-Aout disk I/O statistics:
+About disk I/O statistics:
 
 - https://www.xaprb.com/blog/2010/01/09/how-linux-iostat-computes-its-results/
 - https://www.kernel.org/doc/Documentation/iostats.txt
@@ -118,3 +100,22 @@ Aout disk I/O statistics:
 Others:
 
 - https://serverfault.com/a/85481/121951 (about system memory statistics)
+
+
+## Measurands (columns, and their units)
+
+The quantities intended to be measured.
+
+#### `proc_io_read_throughput_mibps` and `proc_io_write_throughput_mibps`
+
+Measures the disk I/O throughput of the inspected process, in `MiB/s`.
+
+Based on Linux' `/proc/<pid>/io` `rchar` and `wchar`
+
+> The number of bytes which this task has caused to be read from storage. This
+> is simply the sum of bytes which this process passed to read() and pread().
+> It includes things like tty IO and it is unaffected by whether or not actual
+> physical disk IO was required (the read might have been satisfied from
+> pagecache)
+
+(list incomplete)

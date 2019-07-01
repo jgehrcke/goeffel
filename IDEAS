@@ -19,7 +19,6 @@
 
 - Document the fact that -1 has a special meaning for some metrics.
 
--
 
 Ideas for walk-through / tutorial / blog:
 
@@ -27,6 +26,7 @@ Ideas for walk-through / tutorial / blog:
 - Show inspect
 - Show magic
 - Show non-interactive magic, writing PNG file
+
 
 Ideas for messer-analysis specifically:
 
