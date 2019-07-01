@@ -2,7 +2,7 @@
 
 Measures the resource utilization of a specific process over time.
 
-Built for Linux..
+Built for Linux.
 
 In addition to sampling process-specific data this program also measures the
 utilization / saturation / error rate of system-wide resources making it
@@ -11,16 +11,13 @@ straightforward to put the process-specific metrics into context.
 Highlights:
 
 - High sampling rate.
-
 - Can inspect a program subject to process ID changes. This is useful for
   longevity experiments when the program you want to monitor is expected to
   occasionally restart (for instance as of fail-over scenarios).
-
 - Messer helps keeping the data organized: the time series data is written into
   an [HDF5](https://en.wikipedia.org/wiki/Hierarchical_Data_Format) file (
   annotate with relevant metadata such as program invocation time, system
   hostname, and Messer software version).
-
 - Messer comes with a data plotting tool (separate from the data acquisition
   program).
 
@@ -29,9 +26,7 @@ Messer values measurement correctness very highly. Some aspects:
 - It uses a sampling interval of 0.5 seconds for making narrow spikes visible.
   Note: the highest meaningful sampling rate is limited by the kernel's timer
   and bookkeeping system.
-
 - The core sampling loop does little work besides the measurement itself.
-
 - The measurement process which runs the core sampling loop writes each sample
   to a queue. Messer uses a separate process for consuming this queue and for
   emitting the time series data for later inspection (that is, the measurement
@@ -42,12 +37,8 @@ Messer values measurement correctness very highly. Some aspects:
 ## Motivation
 
 This was born out of a need for solid tooling. We started with [pidstat from
-sysstat](https://github.com/sysstat/sysstat/blob/master/pidstat.c), launched in
-the following manner:
-
-```
-pidstat -hud -p $PID 1 1
-```
+sysstat](https://github.com/sysstat/sysstat/blob/master/pidstat.c), launched as
+`pidstat -hud -p $PID 1 1`.
 
 We found that it does not properly account for multiple threads running in the
 same process, and that various issues in that regard exist in this program
@@ -62,16 +53,15 @@ overall seems to be a great tool. However, it seems to be optimized for
 interactive usage (whereas we were looking for a robust measurement program
 which can be pointed at a process and then be left unattended for a significant
 while) and there does not seem to be a decent approach towards persisting the
-collected time series data on disk for later inspection (`cpustat` seems to be
-able to write a binary file when using `-cpuprofile` but it is a little unclear
-what this file contains and how to analyze the data).
+collected time series data on disk for later inspection (it seems to be able to
+write a binary file when using `-cpuprofile` but it is a little unclear what
+this file contains and how to analyze the data).
 
 The program [psrecord](https://github.com/astrofrog/psrecord) (which effectively
-wraps [psutil](https://psutil.readthedocs.io/en/latest/)) has the same
-fundamental idea as this code here; it however does not have a clear separation
-of concerns between persisting the data to disk, performing the measurement
-itself, and plotting the data, rendering it not production-ready for our
-concerns.
+wraps [psutil](https://psutil.readthedocs.io/en/latest/)) has a similar
+fundamental idea as Messer; it however does not have a clear separation of
+concerns between persisting the data to disk, performing the measurement itself,
+and plotting the data, making it too error-prone and not production-ready.
 
 
 ### Measurands (columns, and their units)
@@ -90,7 +80,6 @@ Based on Linux' `/proc/<pid>/io` `rchar` and `wchar`
 > physical disk IO was required (the read might have been satisfied from
 > pagecache)
 
-Note(JP): rename to `proc_disk_read_throughput_mibps`?
 
 ## Notes
 
@@ -103,12 +92,12 @@ Note(JP): rename to `proc_disk_read_throughput_mibps`?
   ([example](https://github.com/sysstat/sysstat/commit/52977c479d3de1cb2535f896273d518326c26722)).
 
 
-## Valuable resources
+## Valuable references
 
 External references on the subject matter that I found useful during
 development.
 
-### About system performance measurement, and kernel time bookkeeping
+About system performance measurement, and kernel time bookkeeping:
 
 - http://www.brendangregg.com/usemethod.html
 - https://www.vividcortex.com/blog/monitoring-and-observability-with-use-and-red
@@ -116,7 +105,7 @@ development.
 - https://elinux.org/Kernel_Timer_Systems
 - https://github.com/Leo-G/DevopsWiki/wiki/How-Linux-CPU-Usage-Time-and-Percentage-is-calculated
 
-### About disk I/O statistics
+Aout disk I/O statistics:
 
 - https://www.xaprb.com/blog/2010/01/09/how-linux-iostat-computes-its-results/
 - https://www.kernel.org/doc/Documentation/iostats.txt
@@ -126,6 +115,6 @@ development.
 - https://coderwall.com/p/utc42q/understanding-iostat
 - https://www.percona.com/doc/percona-toolkit/LATEST/pt-diskstats.html
 
-### Others
+Others:
 
 - https://serverfault.com/a/85481/121951 (about system memory statistics)

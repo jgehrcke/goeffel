@@ -15,6 +15,12 @@
 - Make sampling interval configurable (also implement a meaningful minimum; i.e.
   maximum rate).
 
+- Rename `proc_io_read...` to `proc_disk_read_...`?
+
+- Document the fact that -1 has a special meaning for some metrics.
+
+-
+
 Ideas for walk-through / tutorial / blog:
 
 - Show how PID command picks up new PID
