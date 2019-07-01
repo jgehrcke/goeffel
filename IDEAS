@@ -9,6 +9,9 @@
 
 - For the magic plot allow for a non-interactive mode which only writes to disk.
 
+- Note that this program must be run as root (in docs) and also generate nice
+  error messages around that.
+
 Ideas for walk-through / tutorial / blog:
 
 - Show how PID command picks up new PID
