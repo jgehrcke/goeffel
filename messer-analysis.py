@@ -41,6 +41,50 @@ logging.basicConfig(format=logfmt, datefmt=datefmt, level=logging.DEBUG)
 log = logging.getLogger()
 
 
+COLUMN_PLOT_CONFIGS = {
+    'proc_util_percent_total': {
+        'y_label': 'Process CPU util (total) [%]',
+        'plot_title': 'foo',
+        'rolling_wdw_width_seconds': 5,
+    },
+    'proc_io_read_rate_hz': {
+        'y_label': 'Process read() rate [Hz]',
+        'plot_title': 'foo',
+        'rolling_wdw_width_seconds': 5,
+        'yscale': 'symlog'
+    },
+    'proc_io_write_rate_hz': {
+        'y_label': 'Process write() rate [Hz]',
+        'plot_title': 'foo',
+        'rolling_wdw_width_seconds': 5,
+        'yscale': 'symlog'
+    },
+    'proc_io_write_throughput_mibps': {
+        'y_label': 'Process write() tp [MiB/s]',
+        'plot_title': 'foo',
+        'rolling_wdw_width_seconds': 5,
+        'yscale': 'symlog'
+    },
+    'system_loadavg1': {
+        'column_name': ,
+        'y_label': 'System 1 min load avg',
+        'plot_title': 'foo',
+        'rolling_wdw_width_seconds': 0
+    },
+    'disk_{DEVNAME}_util_percent': {
+        'y_label': '{DEVNAME} util [%]',
+        'plot_title': 'foo',
+        'rolling_wdw_width_seconds': 5
+    },
+    'disk_{DEVNAME}_write_latency_ms': {
+         'y_label': '{DEVNAME} wl [ms]',
+         'plot_title': 'foo',
+         'rolling_wdw_width_seconds': 5
+    },
+}
+
+
+# Global, populated by `parse_cmdline_args()`.
 ARGS = None
 
 
@@ -279,55 +323,13 @@ def plot_magic(dataframe, metadata):
     different column in the same dataframe.
     """
 
-    column_dicts = [
-        {
-            'column_name': 'proc_util_percent_total',
-            'y_label': 'Process CPU util (total) %',
-            'plot_title': 'foo',
-            'rolling_wdw_width_seconds': 5,
-        },
-        {
-            'column_name': 'proc_io_read_rate_hz',
-            'y_label': 'Process read() rate [Hz]',
-            'plot_title': 'foo',
-            'rolling_wdw_width_seconds': 5,
-            'yscale': 'symlog'
-        },
-        {
-            'column_name': 'proc_io_write_rate_hz',
-            'y_label': 'Process write() rate [Hz]',
-            'plot_title': 'foo',
-            'rolling_wdw_width_seconds': 5,
-            'yscale': 'symlog'
-        },
-        {
-            'column_name': 'proc_io_write_throughput_mibps',
-            'y_label': 'Process write() tp [MiB/s]',
-            'plot_title': 'foo',
-            'rolling_wdw_width_seconds': 5,
-            'yscale': 'symlog'
-        },
-        {
-            'column_name': 'system_loadavg1',
-            'y_label': 'System 1 min load avg',
-            'plot_title': 'foo',
-            'rolling_wdw_width_seconds': 0
-        }
+    columns_to_plot = [
+        'proc_util_percent_total',
+        'proc_io_read_rate_hz',
+        'proc_io_write_rate_hz',
+        'proc_io_write_throughput_mibps',
+        'system_loadavg1',
     ]
-
-    # Dynamically add columns based on args.
-        # {
-        #     'column_name': 'disk_xvda1_util_percent',
-        #     'y_label': 'xvda1 util %',
-        #     'plot_title': 'foo',
-        #     'rolling_wdw_width_seconds': 5
-        # },
-        # {
-        #     'column_name': 'disk_xvda1_write_latency_ms',
-        #     'y_label': 'xvda1 wl [ms]',
-        #     'plot_title': 'foo',
-        #     'rolling_wdw_width_seconds': 5
-        # },
 
     # Note(JP): this is a quick workaround to populate properties required in
     # code path downstream.
@@ -411,10 +413,12 @@ def plot_magic(dataframe, metadata):
     )
 
     # Plot individual subplots.
-    for idx, column_dict in enumerate(column_dicts, 1):
-        series = dataframe[column_dict['column_name']]
+    for idx, column_name in enumerate(columns_to_plot, 1):
+        series = dataframe[column_name]
 
-        plotsettings = {}
+        # Column-specific plot config such as y label, largely depends on the
+        # metric itself.
+        column_plot_config = COLUMN_PLOT_CONFIGS[column_name]
 
         # Subplot-specific plot config, independent of the metric, mainly
         # dependent on the position of the subplot.
