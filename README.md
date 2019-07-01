@@ -105,13 +105,16 @@ Note(JP): rename to `proc_disk_read_throughput_mibps`?
 
 ## Valuable resources
 
+External references on the subject matter that I found useful during
+development.
+
 ### About system performance measurement, and kernel time bookkeeping
 
 - http://www.brendangregg.com/usemethod.html
+- https://www.vividcortex.com/blog/monitoring-and-observability-with-use-and-red
 - https://github.com/uber-common/cpustat/blob/master/README.md
 - https://elinux.org/Kernel_Timer_Systems
 - https://github.com/Leo-G/DevopsWiki/wiki/How-Linux-CPU-Usage-Time-and-Percentage-is-calculated
-
 
 ### About disk I/O statistics
 
