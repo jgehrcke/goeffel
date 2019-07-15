@@ -46,6 +46,10 @@
 - Make sampling interval configurable (also implement a meaningful minimum; i.e.
   maximum rate).
 
+- Rename proc_util_percent_ to proc_cpu_util_percent_
+
 - Document the fact that -1 has a special meaning for some metrics.
+
+- Replace HDF5 type for columns with unit 'percent' to be Float16 instead of Float32?
 
 - Collect some TCP / network metrics by default?
