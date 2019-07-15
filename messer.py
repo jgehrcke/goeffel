@@ -426,8 +426,6 @@ def _prepare_hdf5_file_if_not_yet_existing():
     # >>> 24 * 60 * 60 * 30
     # 2592000
 
-    # TODO(JP): error out if file exists. At least warn.
-
     log.info('Create HDF5 file: %s', OUTFILE_PATH_HDF5)
 
     hdf5file = tables.open_file(
@@ -526,19 +524,52 @@ def sample_writer_process(queue):
         log.debug('Consumer iteration: %.6f s', time.monotonic() - t_after_get)
 
 
+def _hdf5_file_rotate_if_required():
+    maxmb = 20
+
+    # During the first iteration the file does not yet exist.
+    if not os.path.exists(OUTFILE_PATH_HDF5):
+        return
+
+    if os.path.getsize(OUTFILE_PATH_HDF5) < 1024 * 1024 * maxmb:
+        log.info('%s is smaller than %s',
+            os.path.getsize(OUTFILE_PATH_HDF5),
+            1024 * 1024 * maxmb
+        )
+        return
+
+    log.info('%s is larger than %s MB, rotate', OUTFILE_PATH_HDF5, maxmb)
+
+    running_index = 1
+
+    while True:
+
+        tryfilename = OUTFILE_PATH_HDF5 + '.' + str(running_index).zfill(3)
+
+        if not os.path.exists(tryfilename):
+            log.info('Move current HDF5 file to %s', tryfilename)
+            # If this fails the program crashes which is as of now desired
+            # behavior.
+            os.rename(OUTFILE_PATH_HDF5, tryfilename)
+            break
+
+        running_index += 1
+
+
 def _write_samples_hdf5_if_enabled(samples):
     """
     For writing every sample go through the complete life cycle from open()ing
-    the file to close()ing the file to minimize the risk for data corruption. If
+    the HDF5 file to close()ing it, to minimize the risk for data corruption. If
     doing this once per SAMPLE_INTERVAL_SECONDS generates too much overhead a
-    proper solution would be to write more than one sample (row) in one go.
+    proper solution is to write more than one sample (row) in one go.
     """
     if OUTFILE_PATH_HDF5 is None:
-        # That *is* the signal to not write an HDF5 output file.
+        # That is the signal to not write an HDF5 output file.
         return
 
     t0 = time.monotonic()
 
+    _hdf5_file_rotate_if_required()
     _prepare_hdf5_file_if_not_yet_existing()
 
     with tables.open_file(OUTFILE_PATH_HDF5, 'a', filters=HDF5_COMP_FILTER) as f:
