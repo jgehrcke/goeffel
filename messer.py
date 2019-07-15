@@ -560,7 +560,11 @@ def _write_samples_hdf5_if_enabled(samples):
         # HDF5 perspective, but also from the kernel's / file system's
         # perspective.
 
-    log.debug('Updated HDF5 file (took %.5f s)', time.monotonic() - t0)
+    log.info(
+        'Updated HDF5 file (wrote %s sample(s) in %.5f s)',
+        len(samples),
+        time.monotonic() - t0,
+    )
 
 
 def _write_sample_csv_if_enabled(sample):
