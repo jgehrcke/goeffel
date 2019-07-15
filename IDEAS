@@ -43,6 +43,6 @@
 - Make sampling interval configurable (also implement a meaningful minimum; i.e.
   maximum rate).
 
-- Rename `proc_io_read...` to `proc_disk_read_...`?
-
 - Document the fact that -1 has a special meaning for some metrics.
+
+- Collect some TCP / network metrics by default?

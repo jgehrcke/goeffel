@@ -48,19 +48,19 @@ COLUMN_PLOT_CONFIGS = {
         'plot_title': 'foo',
         'rolling_wdw_width_seconds': 5,
     },
-    'proc_io_read_rate_hz': {
+    'proc_disk_read_rate_hz': {
         'y_label': 'Process read() rate [Hz]',
         'plot_title': 'foo',
         'rolling_wdw_width_seconds': 5,
         'yscale': 'symlog'
     },
-    'proc_io_write_rate_hz': {
+    'proc_disk_write_rate_hz': {
         'y_label': 'Process write() rate [Hz]',
         'plot_title': 'foo',
         'rolling_wdw_width_seconds': 5,
         'yscale': 'symlog'
     },
-    'proc_io_write_throughput_mibps': {
+    'proc_disk_write_throughput_mibps': {
         'y_label': 'Process write() tp [MiB/s]',
         'plot_title': 'foo',
         'rolling_wdw_width_seconds': 5,
@@ -328,9 +328,9 @@ def plot_magic(dataframe, metadata):
 
     columns_to_plot = [
         'proc_util_percent_total',
-        'proc_io_read_rate_hz',
-        'proc_io_write_rate_hz',
-        'proc_io_write_throughput_mibps',
+        'proc_disk_read_rate_hz',
+        'proc_disk_write_rate_hz',
+        'proc_disk_write_throughput_mibps',
         'system_loadavg1',
     ]
 

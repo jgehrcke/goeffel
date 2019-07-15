@@ -396,10 +396,10 @@ HDF5_SAMPLE_SCHEMA = {
     'proc_util_percent_total': tables.Float32Col(pos=4),
     'proc_util_percent_user': tables.Float32Col(pos=5),
     'proc_util_percent_system': tables.Float32Col(pos=6),
-    'proc_io_read_throughput_mibps': tables.Float32Col(pos=7),
-    'proc_io_write_throughput_mibps': tables.Float32Col(pos=8),
-    'proc_io_read_rate_hz': tables.Float32Col(pos=9),
-    'proc_io_write_rate_hz': tables.Float32Col(pos=10),
+    'proc_disk_read_throughput_mibps': tables.Float32Col(pos=7),
+    'proc_disk_write_throughput_mibps': tables.Float32Col(pos=8),
+    'proc_disk_read_rate_hz': tables.Float32Col(pos=9),
+    'proc_disk_write_rate_hz': tables.Float32Col(pos=10),
     'proc_mem_rss': tables.UInt64Col(pos=11),
     'proc_mem_vms': tables.UInt64Col(pos=12),
     'proc_mem_dirty': tables.UInt32Col(pos=13),
@@ -776,10 +776,10 @@ def generate_samples(pid):
         # with bytes per second are hard to interpret. However, in other
         # scenarios others might think that bps are better/more flexible. No
         # perfect solution.
-        proc_io_read_throughput_mibps = (proc_io2.read_chars - proc_io1.read_chars) / 1048576.0 / delta_t
-        proc_io_write_throughput_mibps = (proc_io2.write_chars - proc_io1.write_chars) / 1048576.0 / delta_t
-        proc_io_read_rate_hz = (proc_io2.read_count - proc_io1.read_count) / delta_t
-        proc_io_write_rate_hz = (proc_io2.write_count - proc_io1.write_count) / delta_t
+        proc_disk_read_throughput_mibps = (proc_io2.read_chars - proc_io1.read_chars) / 1048576.0 / delta_t
+        proc_disk_write_throughput_mibps = (proc_io2.write_chars - proc_io1.write_chars) / 1048576.0 / delta_t
+        proc_disk_read_rate_hz = (proc_io2.read_count - proc_io1.read_count) / delta_t
+        proc_disk_write_rate_hz = (proc_io2.write_count - proc_io1.write_count) / delta_t
 
         # Order matters, but only for the CSV output in the sample writer.
         sampledict = OrderedDict((
@@ -789,10 +789,10 @@ def generate_samples(pid):
             ('proc_util_percent_total', proc_util_percent_total),
             ('proc_util_percent_user', proc_util_percent_user),
             ('proc_util_percent_system', proc_util_percent_system),
-            ('proc_io_read_throughput_mibps', proc_io_read_throughput_mibps),
-            ('proc_io_write_throughput_mibps', proc_io_write_throughput_mibps),
-            ('proc_io_read_rate_hz', proc_io_read_rate_hz),
-            ('proc_io_write_rate_hz', proc_io_write_rate_hz),
+            ('proc_disk_read_throughput_mibps', proc_disk_read_throughput_mibps),
+            ('proc_disk_write_throughput_mibps', proc_disk_write_throughput_mibps),
+            ('proc_disk_read_rate_hz', proc_disk_read_rate_hz),
+            ('proc_disk_write_rate_hz', proc_disk_write_rate_hz),
             ('proc_mem_rss', proc_mem.rss),
             ('proc_mem_vms', proc_mem.vms),
             ('proc_mem_dirty', proc_mem.dirty),
