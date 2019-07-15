@@ -118,4 +118,10 @@ Based on Linux' `/proc/<pid>/io` `rchar` and `wchar`
 > physical disk IO was required (the read might have been satisfied from
 > pagecache)
 
+
+#### `proc_mem_rss_percent`
+
+Fraction of process resident set size (RSS, https://stackoverflow.com/a/21049737) relative to machine's physical memory size.
+
+
 (list incomplete)

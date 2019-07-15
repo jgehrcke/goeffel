@@ -400,10 +400,13 @@ HDF5_SAMPLE_SCHEMA = {
     'proc_disk_write_throughput_mibps': tables.Float32Col(pos=8),
     'proc_disk_read_rate_hz': tables.Float32Col(pos=9),
     'proc_disk_write_rate_hz': tables.Float32Col(pos=10),
-    'proc_mem_rss': tables.UInt64Col(pos=11),
-    'proc_mem_vms': tables.UInt64Col(pos=12),
-    'proc_mem_dirty': tables.UInt32Col(pos=13),
-    'proc_num_fds': tables.UInt32Col(pos=14),
+    'proc_cpu_num': tables.Int16Col(pos=11),
+    'proc_num_threads': tables.Int16Col(pos=12),
+    'proc_mem_percent': tables.Float16Col(pos=13),
+    'proc_mem_rss': tables.UInt64Col(pos=14),
+    'proc_mem_vms': tables.UInt64Col(pos=15),
+    'proc_mem_dirty': tables.UInt32Col(pos=16),
+    'proc_num_fds': tables.UInt32Col(pos=17),
 }
 
 
@@ -706,6 +709,17 @@ def generate_samples(pid):
     # already errors out when the PID is unknown.
     process = psutil.Process(pid)
 
+    process_attrs_to_get_as_dict = [
+        'cpu_times',
+        'io_counters',
+        'memory_info',
+        'num_fds',
+        'cpu_num',
+        'memory_percent',
+        'num_threads',
+        'num_ctx_switches'
+    ]
+
     # `t_rel1` is the reference timestamp for differential analysis where a time
     # difference is in the denominator of a calculation:
     #
@@ -718,7 +732,7 @@ def generate_samples(pid):
     # instead of the system time and then get the first set of data points
     # relevant for the differential analysis immediately after getting t_rel1.
     t_rel1 = time.monotonic()
-    procstats1 = process.as_dict(attrs=['cpu_times', 'io_counters', 'memory_info', 'num_fds'])
+    procstats1 = process.as_dict(attrs=process_attrs_to_get_as_dict)
     diskstats1, diskstats2 = None, None
     if ARGS.diskstats:
         diskstats1 = psutil.disk_io_counters(perdisk=True)
@@ -755,7 +769,7 @@ def generate_samples(pid):
         # by default.
 
         t_rel2 = time.monotonic()
-        procstats2 = process.as_dict(attrs=['cpu_times', 'io_counters', 'memory_info', 'num_fds'])
+        procstats2 = process.as_dict(attrs=process_attrs_to_get_as_dict)
         if ARGS.diskstats:
             diskstats2 = psutil.disk_io_counters(perdisk=True)
 
@@ -828,6 +842,9 @@ def generate_samples(pid):
             ('proc_disk_write_throughput_mibps', proc_disk_write_throughput_mibps),
             ('proc_disk_read_rate_hz', proc_disk_read_rate_hz),
             ('proc_disk_write_rate_hz', proc_disk_write_rate_hz),
+            ('proc_cpu_num', procstats2['cpu_num']),
+            ('proc_num_threads', procstats2['num_threads']),
+            ('proc_mem_rss_percent', procstats2['memory_percent']),
             ('proc_mem_rss', proc_mem.rss),
             ('proc_mem_vms', proc_mem.vms),
             ('proc_mem_dirty', proc_mem.dirty),
