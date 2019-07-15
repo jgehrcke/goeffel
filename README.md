@@ -124,4 +124,7 @@ Based on Linux' `/proc/<pid>/io` `rchar` and `wchar`
 Fraction of process resident set size (RSS, https://stackoverflow.com/a/21049737) relative to machine's physical memory size.
 
 
+Voluntary and involuntary context switches
+https://unix.stackexchange.com/a/442991
+
 (list incomplete)

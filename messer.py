@@ -401,12 +401,13 @@ HDF5_SAMPLE_SCHEMA = {
     'proc_disk_read_rate_hz': tables.Float32Col(pos=9),
     'proc_disk_write_rate_hz': tables.Float32Col(pos=10),
     'proc_cpu_num': tables.Int16Col(pos=11),
-    'proc_num_threads': tables.Int16Col(pos=12),
-    'proc_mem_percent': tables.Float16Col(pos=13),
-    'proc_mem_rss': tables.UInt64Col(pos=14),
-    'proc_mem_vms': tables.UInt64Col(pos=15),
-    'proc_mem_dirty': tables.UInt32Col(pos=16),
-    'proc_num_fds': tables.UInt32Col(pos=17),
+    'proc_num_ip_sockets_open': tables.Int16Col(pos=12),
+    'proc_num_threads': tables.Int16Col(pos=13),
+    'proc_mem_percent': tables.Float16Col(pos=14),
+    'proc_mem_rss': tables.UInt64Col(pos=15),
+    'proc_mem_vms': tables.UInt64Col(pos=16),
+    'proc_mem_dirty': tables.UInt32Col(pos=17),
+    'proc_num_fds': tables.UInt32Col(pos=18),
 }
 
 
@@ -774,8 +775,20 @@ def generate_samples(pid):
             diskstats2 = psutil.disk_io_counters(perdisk=True)
 
         # Now the data for the timing-sensitive differential anlysis has been
-        # acquired. What follows is the acquisition of system-wide metrics.
+        # acquired. What follows is more time-costly data acquisition for
+        # process-specific metrics.
 
+        # Get momentary snapshot of the TCP/UDP sockets used by the process.
+        # This is a relatively costly operation, taking more than 1/100 of a
+        # second:
+        #
+        #    timeit('p.connections()', number=100, globals=globals()) / 100
+        #    0.020052049085497858
+        #
+        # `'inet'` means: get all TCP or UDP sockets of type IPv4 and IPv6.
+        ip_sockets = process.connections(kind='inet')
+
+        # What follows is the acquisition of system-wide metrics.
         # https://serverfault.com/a/85481/121951
         system_mem = psutil.virtual_memory()
         loadavg = os.getloadavg()
@@ -843,6 +856,7 @@ def generate_samples(pid):
             ('proc_disk_read_rate_hz', proc_disk_read_rate_hz),
             ('proc_disk_write_rate_hz', proc_disk_write_rate_hz),
             ('proc_cpu_num', procstats2['cpu_num']),
+            ('proc_num_ip_sockets_open', len(ip_sockets)),
             ('proc_num_threads', procstats2['num_threads']),
             ('proc_mem_rss_percent', procstats2['memory_percent']),
             ('proc_mem_rss', proc_mem.rss),
