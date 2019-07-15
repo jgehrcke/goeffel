@@ -123,7 +123,7 @@ References for interpreting output:
 
 log = logging.getLogger()
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s.%(msecs)03d %(levelname)s: %(message)s",
     datefmt="%y%m%d-%H:%M:%S"
 )
@@ -288,7 +288,7 @@ def main():
     samplequeue = multiprocessing.Queue()
 
     log.info(
-        'Collect time series for the folling metrics: \n  %s',
+        'Collect time series for the following metrics: \n  %s',
         '\n  '.join(k for k in HDF5_SAMPLE_SCHEMA.keys()))
 
     samplewriter = multiprocessing.Process(
@@ -307,10 +307,10 @@ def main():
         # the sample writer process to terminate.
         samplequeue.put(None)
         samplequeue.close()
-        log.info('Wait for producer buffer to be empty')
+        log.info('Wait for producer buffer to become empty')
         samplequeue.join_thread()
         samplewriter.join()
-        log.debug('Sample writer process terminated')
+        log.info('Sample writer process terminated')
 
 
 def process_outfile_args():
