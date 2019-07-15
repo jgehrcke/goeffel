@@ -1,4 +1,16 @@
-- Data emission: allow for emitting data into a metrics pipeline via network
+## Data collection
+
+- Use eBPF for acquiring advanced kernel statistics:
+    - https://pypi.org/project/pyebpf/
+    - https://github.com/iovisor/bcc
+
+
+## Data emission
+
+- allow for emitting data into a metrics pipeline via network (statsd, ...)
+
+
+## File management
 
 - HDF5 file management:  build in a concept that allows for "running this
   permanently" while consuming predictable disk space. Something along the lines
@@ -7,7 +19,23 @@
 - File management in general: prevent accidental concurrent write access.
   Simple: check if file exists. More complex: file locking.
 
+
+## messer-analysis
+
 - For the magic plot allow for a non-interactive mode which only writes to disk.
+
+- control log level with command line flag
+
+
+## Ideas for walk-through / tutorial / blog:
+
+- Show how PID command picks up new PID
+- Show inspect
+- Show magic
+- Show non-interactive magic, writing PNG file
+
+
+## Misc notes
 
 - Note that this program must be run as root (in docs) and also generate nice
   error messages around that.
@@ -18,17 +46,3 @@
 - Rename `proc_io_read...` to `proc_disk_read_...`?
 
 - Document the fact that -1 has a special meaning for some metrics.
-
-
-Ideas for walk-through / tutorial / blog:
-
-- Show how PID command picks up new PID
-- Show inspect
-- Show magic
-- Show non-interactive magic, writing PNG file
-
-
-Ideas for messer-analysis specifically:
-
-    - control log level with command line flag
-
