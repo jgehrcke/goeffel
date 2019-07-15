@@ -408,6 +408,7 @@ HDF5_SAMPLE_SCHEMA = {
     'proc_mem_vms': tables.UInt64Col(pos=16),
     'proc_mem_dirty': tables.UInt32Col(pos=17),
     'proc_num_fds': tables.UInt32Col(pos=18),
+    'proc_ctx_switch_rate_hz': tables.Float32Col(pos=19),
 }
 
 
@@ -814,9 +815,10 @@ def generate_samples(pid):
         # sampling interval).
         cputimes1 = procstats1['cpu_times']
         cputimes2 = procstats2['cpu_times']
-
         proc_io1 = procstats1['io_counters']
         proc_io2 = procstats2['io_counters']
+        num_ctx_switches1 = procstats1['num_ctx_switches']
+        num_ctx_switches2 = procstats2['num_ctx_switches']
 
         delta_t = t_rel2 - t_rel1
         _delta_cputimes_user = cputimes2.user - cputimes1.user
@@ -843,6 +845,12 @@ def generate_samples(pid):
         proc_disk_read_rate_hz = (proc_io2.read_count - proc_io1.read_count) / delta_t
         proc_disk_write_rate_hz = (proc_io2.write_count - proc_io1.write_count) / delta_t
 
+        proc_ctx_switch_rate_hz = \
+            (
+                (num_ctx_switches2.voluntary - num_ctx_switches1.voluntary) + \
+                (num_ctx_switches2.involuntary - num_ctx_switches1.involuntary)
+            ) / delta_t
+
         # Order matters, but only for the CSV output in the sample writer.
         sampledict = OrderedDict((
             ('unixtime', time_sample_timestamp),
@@ -858,6 +866,7 @@ def generate_samples(pid):
             ('proc_cpu_num', procstats2['cpu_num']),
             ('proc_num_ip_sockets_open', len(ip_sockets)),
             ('proc_num_threads', procstats2['num_threads']),
+            ('proc_ctx_switch_rate_hz', proc_ctx_switch_rate_hz),
             ('proc_mem_rss_percent', procstats2['memory_percent']),
             ('proc_mem_rss', proc_mem.rss),
             ('proc_mem_vms', proc_mem.vms),

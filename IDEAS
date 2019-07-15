@@ -18,6 +18,8 @@
   Update: basic file rotation support has now been built in. Deletion may come
   next
 
+- File rotation: keep internal counter, store counter in hdf5 metadata
+
 - File management in general: prevent accidental concurrent write access.
   Example scenario: messer started twice with default args in the same second.
   File locking?
