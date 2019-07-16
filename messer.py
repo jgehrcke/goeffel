@@ -40,25 +40,9 @@ the utilization of system-wide resources making it straightforward to put the
 process-specific metrics into context.
 
 This program has been written for and tested on CPython 3.5 and 3.6 on Linux.
-"""
 
-import argparse
-import textwrap
-import logging
-import sys
-import time
-import os
-import platform
-import signal
-import subprocess
-import multiprocessing
+---
 
-from collections import OrderedDict
-from datetime import datetime
-
-import tables
-
-"""
 This was born out of a need for solid tooling. We started with pidstat from
 sysstat, launched in the following manner:
 
@@ -120,27 +104,49 @@ References for interpreting output:
     - https://stackoverflow.com/q/35837243/145400
 """
 
+import argparse
+import textwrap
+import logging
+import sys
+import time
+import os
+import platform
+import signal
+import subprocess
+import multiprocessing
 
-log = logging.getLogger()
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s.%(msecs)03d %(levelname)s: %(message)s",
-    datefmt="%y%m%d-%H:%M:%S"
-)
+from collections import OrderedDict
+from datetime import datetime
+
+import tables
 
 
-# The sample interval should ideally be larger than 0.2 seconds so that kernel
-# counter update errors and other timing errors do not dominate the data emitted
-# by this program. Relevant reference: https://elinux.org/Kernel_Timer_Systems
-# From the `cpustat` documentation: "Linux CPU time accounting is done in terms
-# of whole "clock ticks", which are often 100ms. This can cause some strange
-# values when sampling every 200ms.""
+# The sample interval should ideallynot be smaller than 0.5 seconds so that
+# kernel counter update errors and other timing errors do not dominate the data
+# emitted by this program. Relevant reference:
+# https://elinux.org/Kernel_Timer_Systems From the `cpustat` documentation:
+# "Linux CPU time accounting is done in terms of whole "clock ticks", which are
+# often 100ms. This can cause some strange values when sampling every 200ms.""
 SAMPLE_INTERVAL_SECONDS = 0.5
 
 # If the program is invoked with a PID command and the process goes away then
 # the PID command is invoked periodically for polling for a new PID. This
 # constant determines the polling interval.
 PROCESS_PID_POLL_INTERVAL_SECONDS = 1.0
+
+# No strong use case so far. This value is added to the HDF5 file metadata.
+MESSER_SAMPLE_SCHEMA_VERSION = 1
+
+# For choosing compression parameters, interoperability and reliability
+# (reducing risk for corruption) matters more than throughput.
+HDF5_COMP_FILTER = tables.Filters(complevel=9, complib='zlib', fletcher32=True)
+
+CSV_COLUMN_HEADER_WRITTEN = False
+OUTFILE_PATH_HDF5 = None
+OUTFILE_PATH_CSV = None
+
+# Will be populated by ArgumentParser, with options from the command line.
+ARGS = None
 
 # Measure invocation time (is consumed in various places, e.g. written to
 # the HDF5 metadata).
@@ -149,23 +155,12 @@ INVOCATION_TIME_LOCAL_STRING = datetime.fromtimestamp(
     INVOCATION_TIME_UNIX_TIMESTAMP).strftime(format='%Y%m%d_%H%M%S')
 
 
-MESSER_SAMPLE_SCHEMA_VERSION = 1
-
-
-# Will be populated by ArgumentParser, with options from the command line.
-ARGS = None
-
-
-CSV_COLUMN_HEADER_WRITTEN = False
-
-
-OUTFILE_PATH_HDF5 = None
-OUTFILE_PATH_CSV = None
-
-
-# For choosing compression parameters, interoperability and reliability
-# (reducing risk for corruption) matters more than throughput.
-HDF5_COMP_FILTER = tables.Filters(complevel=9, complib='zlib', fletcher32=True)
+log = logging.getLogger()
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s.%(msecs)03d %(levelname)s: %(message)s",
+    datefmt="%y%m%d-%H:%M:%S"
+)
 
 
 class HDF5Schema:
@@ -619,7 +614,7 @@ def _write_samples_hdf5_if_enabled(samples):
         # perspective.
 
     log.info(
-        'Updated HDF5 file (wrote %s sample(s) in %.5f s)',
+        'Updated HDF5 file: wrote %s sample(s) in %.5f s',
         len(samples),
         time.monotonic() - t0,
     )
