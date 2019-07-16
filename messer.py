@@ -196,19 +196,19 @@ class HDF5Schema:
             ('proc_cpu_util_percent_total', tables.Float32Col),
             ('proc_cpu_util_percent_user', tables.Float32Col),
             ('proc_cpu_util_percent_system', tables.Float32Col),
+            ('proc_cpu_num', tables.Int16Col),
+            ('proc_ctx_switch_rate_hz', tables.Float32Col),
             ('proc_disk_read_throughput_mibps', tables.Float32Col),
             ('proc_disk_write_throughput_mibps', tables.Float32Col),
             ('proc_disk_read_rate_hz', tables.Float32Col),
             ('proc_disk_write_rate_hz', tables.Float32Col),
-            ('proc_cpu_num', tables.Int16Col),
             ('proc_num_ip_sockets_open', tables.Int16Col),
             ('proc_num_threads', tables.Int16Col),
+            ('proc_num_fds', tables.UInt32Col),
             ('proc_mem_rss_percent', tables.Float16Col),
             ('proc_mem_rss', tables.UInt64Col),
             ('proc_mem_vms', tables.UInt64Col),
             ('proc_mem_dirty', tables.UInt32Col),
-            ('proc_num_fds', tables.UInt32Col),
-            ('proc_ctx_switch_rate_hz', tables.Float32Col),
         ))
 
         for colname, coltype in default_columns.items():
