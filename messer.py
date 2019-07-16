@@ -137,10 +137,13 @@ logging.basicConfig(
 # values when sampling every 200ms.""
 SAMPLE_INTERVAL_SECONDS = 0.5
 
+# If the program is invoked with a PID command and the process goes away then
+# the PID command is invoked periodically for polling for a new PID. This
+# constant determines the polling interval.
+PROCESS_PID_POLL_INTERVAL_SECONDS = 1.0
 
-PROCESS_PID_POLL_INTERVAL_SECONDS = 2.0
-
-# Measure invocation time (is consumed in various places).
+# Measure invocation time (is consumed in various places, e.g. written to
+# the HDF5 metadata).
 INVOCATION_TIME_UNIX_TIMESTAMP = time.time()
 INVOCATION_TIME_LOCAL_STRING = datetime.fromtimestamp(
     INVOCATION_TIME_UNIX_TIMESTAMP).strftime(format='%Y%m%d_%H%M%S')
