@@ -393,9 +393,9 @@ HDF5_SAMPLE_SCHEMA = {
 
     # Process-specific metrics.
     'proc_pid': tables.Int32Col(pos=3),
-    'proc_util_percent_total': tables.Float32Col(pos=4),
-    'proc_util_percent_user': tables.Float32Col(pos=5),
-    'proc_util_percent_system': tables.Float32Col(pos=6),
+    'proc_cpu_util_percent_total': tables.Float32Col(pos=4),
+    'proc_cpu_util_percent_user': tables.Float32Col(pos=5),
+    'proc_cpu_util_percent_system': tables.Float32Col(pos=6),
     'proc_disk_read_throughput_mibps': tables.Float32Col(pos=7),
     'proc_disk_write_throughput_mibps': tables.Float32Col(pos=8),
     'proc_disk_read_rate_hz': tables.Float32Col(pos=9),
@@ -824,9 +824,9 @@ def generate_samples(pid):
         _delta_cputimes_user = cputimes2.user - cputimes1.user
         _delta_cputimes_system = cputimes2.system - cputimes1.system
         _delta_cputimes_total = _delta_cputimes_user + _delta_cputimes_system
-        proc_util_percent_total = 100 * _delta_cputimes_total / delta_t
-        proc_util_percent_user = 100 * _delta_cputimes_user / delta_t
-        proc_util_percent_system = 100 * _delta_cputimes_system / delta_t
+        proc_cpu_util_percent_total = 100 * _delta_cputimes_total / delta_t
+        proc_cpu_util_percent_user = 100 * _delta_cputimes_user / delta_t
+        proc_cpu_util_percent_system = 100 * _delta_cputimes_system / delta_t
 
         proc_mem = procstats2['memory_info']
         proc_num_fds = procstats2['num_fds']
@@ -856,9 +856,9 @@ def generate_samples(pid):
             ('unixtime', time_sample_timestamp),
             ('isotime_local', time_sample_isostring_local),
             ('proc_pid', pid),
-            ('proc_util_percent_total', proc_util_percent_total),
-            ('proc_util_percent_user', proc_util_percent_user),
-            ('proc_util_percent_system', proc_util_percent_system),
+            ('proc_cpu_util_percent_total', proc_cpu_util_percent_total),
+            ('proc_cpu_util_percent_user', proc_cpu_util_percent_user),
+            ('proc_cpu_util_percent_system', proc_cpu_util_percent_system),
             ('proc_disk_read_throughput_mibps', proc_disk_read_throughput_mibps),
             ('proc_disk_write_throughput_mibps', proc_disk_write_throughput_mibps),
             ('proc_disk_read_rate_hz', proc_disk_read_rate_hz),
