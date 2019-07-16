@@ -106,7 +106,15 @@ Others:
 
 The quantities intended to be measured.
 
-#### `proc_io_read_throughput_mibps` and `proc_io_write_throughput_mibps`
+
+#### `proc_cpu_id`
+
+The ID of the CPU that this process is currently running on.
+
+Momentary state at sampling time.
+
+
+#### `proc_disk_read_throughput_mibps` and `proc_disk_write_throughput_mibps`
 
 Measures the disk I/O throughput of the inspected process, in `MiB/s`.
 
@@ -118,13 +126,23 @@ Based on Linux' `/proc/<pid>/io` `rchar` and `wchar`
 > physical disk IO was required (the read might have been satisfied from
 > pagecache)
 
+Mean over the past sampling interval.
+
 
 #### `proc_mem_rss_percent`
 
-Fraction of process resident set size (RSS, https://stackoverflow.com/a/21049737) relative to machine's physical memory size.
+Fraction of process [resident set size](https://stackoverflow.com/a/21049737)
+(RSS) relative to machine's physical memory size in `percent`.
+
+Momentary state at sampling time.
 
 
-Voluntary and involuntary context switches
-https://unix.stackexchange.com/a/442991
+#### `proc_ctx_switch_rate_hz`
+
+The rate of ([voluntary and
+involuntary](https://unix.stackexchange.com/a/442991)) context switches in `Hz`.
+
+Mean over the past sampling interval.
+
 
 (list incomplete)
