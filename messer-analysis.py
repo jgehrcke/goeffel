@@ -246,6 +246,7 @@ def inspect_data_file():
             f'  Invocation time (local): {table.attrs.invocation_time_local}\n'
             f'  PID command: {table.attrs.messer_pid_command}\n'
             f'  PID: {table.attrs.messer_pid}\n'
+            f'  Sampling interval: {table.attrs.messer_sampling_interval_seconds} s\n'
             #f'  Messer schema version: {table.attrs.messer_schema_version}\n'
         )
 
