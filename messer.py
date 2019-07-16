@@ -227,6 +227,12 @@ class HDF5Schema:
 # (extended) from anywhere in the program.
 HDF5_SCHEMA = HDF5Schema()
 
+# When the HDF5 file is being rotated (as of growing beyond a file size limit)
+# then this index is incremented by 1. This global variable keeps state (is
+# modified from code below). The first file in a series has index 1. The index
+# is written to the HDF5 table meta data section.
+HDF5_FILE_SERIES_INDEX = 1
+
 
 def main():
 
@@ -473,6 +479,7 @@ def _prepare_hdf5_file_if_not_yet_existing():
     hdf5table.attrs.messer_pid_command = ARGS.pid_command
     hdf5table.attrs.messer_pid = ARGS.pid
     hdf5table.attrs.messer_sampling_interval_seconds = SAMPLE_INTERVAL_SECONDS
+    hdf5table.attrs.messer_file_series_index = HDF5_FILE_SERIES_INDEX
     hdf5file.close()
 
 
@@ -552,7 +559,8 @@ def _hdf5_file_rotate_if_required():
     if not os.path.exists(OUTFILE_PATH_HDF5):
         return
 
-    maxmb = 20
+    #maxmb = 20
+    maxmb = 0.015
     cursize = os.path.getsize(OUTFILE_PATH_HDF5)
     maxsize = 1024 * 1024 * maxmb
 
@@ -562,20 +570,27 @@ def _hdf5_file_rotate_if_required():
 
     log.info('HDF5 file is larger than %s MB, rotate', maxmb)
 
-    running_index = 1
+    # The current `HDF5_FILE_SERIES_INDEX` is the source of truth. The output
+    # file currently being written to does not contain this index in its file
+    # name (it's in the HDF5 meta data however). Now move that file so that
+    # the path contains this index, then increment the index by 1.
+    global HDF5_FILE_SERIES_INDEX
 
-    while True:
+    new_file_path = OUTFILE_PATH_HDF5 + '.' + str(HDF5_FILE_SERIES_INDEX).zfill(3)
 
-        tryfilename = OUTFILE_PATH_HDF5 + '.' + str(running_index).zfill(3)
+    if os.path.exists(new_file_path):
+        log.error('File unexpectedly exists already: %s', new_file_path)
+        log.error('Erroring out instead of overwriting')
+        sys.exit(1)
 
-        if not os.path.exists(tryfilename):
-            log.info('Move current HDF5 file to %s', tryfilename)
-            # If this fails the program crashes which is as of now desired
-            # behavior.
-            os.rename(OUTFILE_PATH_HDF5, tryfilename)
-            break
+    log.info('Move current HDF5 file to %s', new_file_path)
 
-        running_index += 1
+    # If this fails the program crashes which is as of now desired behavior.
+    os.rename(OUTFILE_PATH_HDF5, new_file_path)
+
+    # The next HDF5 file created by `_prepare_hdf5_file_if_not_yet_existing()`
+    # will contain the incremented value in its meta data.
+    HDF5_FILE_SERIES_INDEX += 1
 
 
 def _write_samples_hdf5_if_enabled(samples):
