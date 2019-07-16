@@ -173,14 +173,6 @@ def main():
         epilog=textwrap.dedent(__doc__).strip()
     )
 
-    # Note(JP): build a mode without process-specific monitoring (no pid, no pid
-    # command)?
-
-    # Note(JP): build a mode where disk IO stats are collected for all disks?
-
-    # TODO(JP): measure performance impact of messer with another instance of
-    # messer.
-
     what = parser.add_mutually_exclusive_group(required=True)
 
     what.add_argument(
