@@ -550,20 +550,19 @@ def sample_writer_process(queue):
 
 
 def _hdf5_file_rotate_if_required():
-    maxmb = 20
-
     # During the first iteration the file does not yet exist.
     if not os.path.exists(OUTFILE_PATH_HDF5):
         return
 
-    if os.path.getsize(OUTFILE_PATH_HDF5) < 1024 * 1024 * maxmb:
-        log.info('%s is smaller than %s',
-            os.path.getsize(OUTFILE_PATH_HDF5),
-            1024 * 1024 * maxmb
-        )
+    maxmb = 20
+    cursize = os.path.getsize(OUTFILE_PATH_HDF5)
+    maxsize = 1024 * 1024 * maxmb
+
+    if cursize < maxsize:
+        log.debug('Do not rotate: %s is smaller than %s', cursize, maxsize)
         return
 
-    log.info('%s is larger than %s MB, rotate', OUTFILE_PATH_HDF5, maxmb)
+    log.info('HDF5 file is larger than %s MB, rotate', maxmb)
 
     running_index = 1
 
