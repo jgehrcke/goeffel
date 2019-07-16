@@ -165,6 +165,71 @@ OUTFILE_PATH_CSV = None
 HDF5_COMP_FILTER = tables.Filters(complevel=9, complib='zlib', fletcher32=True)
 
 
+class HDF5Schema:
+    """
+    Manage a pytables HDF5 schema dictionary.
+
+    The attribute `_schema_dict`, once populated, will define the set of columns
+    stored in the HDF5 file. The order of columns as stored in the HDF5 file
+    will appear as given by the `pos` arguments (provided to the indvidual type
+    constructors below).
+
+    The `__init__()` method below defines the type and order of the set of
+    default columns. More columns can be added dynamically by the program via
+    the `add_column()` method.
+    """
+
+    def __init__(self):
+
+        self.schema_dict =  {
+            # Store time in two formats: for flexible analysis store a 64 bit
+            # unix timestamp (subsecond precision). For convenience, also store
+            # a text representation of the local time (also with subsecond
+            # precision).
+            'unixtime': tables.Time64Col(pos=0),
+            'isotime_local': tables.StringCol(26, pos=1),
+        }
+
+        # Add more default columns, in the order as enumerated here.
+        default_columns = OrderedDict((
+            ('proc_pid', tables.Int32Col),
+            ('proc_cpu_util_percent_total', tables.Float32Col),
+            ('proc_cpu_util_percent_user', tables.Float32Col),
+            ('proc_cpu_util_percent_system', tables.Float32Col),
+            ('proc_disk_read_throughput_mibps', tables.Float32Col),
+            ('proc_disk_write_throughput_mibps', tables.Float32Col),
+            ('proc_disk_read_rate_hz', tables.Float32Col),
+            ('proc_disk_write_rate_hz', tables.Float32Col),
+            ('proc_cpu_num', tables.Int16Col),
+            ('proc_num_ip_sockets_open', tables.Int16Col),
+            ('proc_num_threads', tables.Int16Col),
+            ('proc_mem_rss_percent', tables.Float16Col),
+            ('proc_mem_rss', tables.UInt64Col),
+            ('proc_mem_vms', tables.UInt64Col),
+            ('proc_mem_dirty', tables.UInt32Col),
+            ('proc_num_fds', tables.UInt32Col),
+            ('proc_ctx_switch_rate_hz', tables.Float32Col),
+        ))
+
+        for colname, coltype in default_columns.items():
+            self.add_column(colname, coltype)
+
+    def add_column(self, colname, coltype):
+        """Add a column to the schema.
+
+        Columns will appear in the HDF5 file in the same order as this function
+        is called.
+        """
+        assert colname not in self.schema_dict
+        colpos = len(self.schema_dict) + 1
+        self.schema_dict[colname] = coltype(pos=colpos)
+
+
+# The HDF5Schema instance is meant to be used as a singleton. Can be mutated
+# (extended) from anywhere in the program.
+HDF5_SCHEMA = HDF5Schema()
+
+
 def main():
 
     parser = argparse.ArgumentParser(
@@ -261,7 +326,7 @@ def main():
     if not ARGS.no_system_metrics:
 
         for cn in ('system_loadavg1', 'system_loadavg5','system_loadavg15'):
-            hdf5_schema_add_column(colname=cn, coltype=tables.Float16Col)
+            HDF5_SCHEMA.add_column(colname=cn, coltype=tables.Float16Col)
 
         for cn in (
                 'system_mem_available',
@@ -273,7 +338,7 @@ def main():
                 'system_mem_cached',
                 'system_mem_active',
                 'system_mem_inactive'):
-            hdf5_schema_add_column(colname=cn, coltype=tables.UInt64Col)
+            HDF5_SCHEMA.add_column(colname=cn, coltype=tables.UInt64Col)
 
     # Set up the infrastructure for decoupling measurement (sample collection)
     # from persisting the data.
@@ -281,7 +346,7 @@ def main():
 
     log.info(
         'Collect time series for the following metrics: \n  %s',
-        '\n  '.join(k for k in HDF5_SAMPLE_SCHEMA.keys()))
+        '\n  '.join(k for k in HDF5_SCHEMA.schema_dict.keys()))
 
     samplewriter = multiprocessing.Process(
         target=sample_writer_process,
@@ -370,44 +435,7 @@ def process_diskstats_args():
         # accounting for certain disk metrics.
 
         for n in column_names:
-            hdf5_schema_add_column(colname=n, coltype=tables.Float32Col)
-
-
-# This defines the initial set of columns, more columns can be added dynamically
-# by the program, based on discovery or command line arguments.
-HDF5_SAMPLE_SCHEMA = {
-    # Store time in two formats: for flexible analyses store the unix time stamp
-    # with subsecond precision, and for convenience it is good to also have a
-    # string representation of the local time (also with subsecond precision)
-    # stored.
-    'unixtime': tables.Time64Col(pos=0),
-    'isotime_local': tables.StringCol(26, pos=1),
-
-    # Process-specific metrics.
-    'proc_pid': tables.Int32Col(pos=3),
-    'proc_cpu_util_percent_total': tables.Float32Col(pos=4),
-    'proc_cpu_util_percent_user': tables.Float32Col(pos=5),
-    'proc_cpu_util_percent_system': tables.Float32Col(pos=6),
-    'proc_disk_read_throughput_mibps': tables.Float32Col(pos=7),
-    'proc_disk_write_throughput_mibps': tables.Float32Col(pos=8),
-    'proc_disk_read_rate_hz': tables.Float32Col(pos=9),
-    'proc_disk_write_rate_hz': tables.Float32Col(pos=10),
-    'proc_cpu_num': tables.Int16Col(pos=11),
-    'proc_num_ip_sockets_open': tables.Int16Col(pos=12),
-    'proc_num_threads': tables.Int16Col(pos=13),
-    'proc_mem_rss_percent': tables.Float16Col(pos=14),
-    'proc_mem_rss': tables.UInt64Col(pos=15),
-    'proc_mem_vms': tables.UInt64Col(pos=16),
-    'proc_mem_dirty': tables.UInt32Col(pos=17),
-    'proc_num_fds': tables.UInt32Col(pos=18),
-    'proc_ctx_switch_rate_hz': tables.Float32Col(pos=19),
-}
-
-
-def hdf5_schema_add_column(colname, coltype):
-    assert colname not in HDF5_SAMPLE_SCHEMA
-    colpos = len(HDF5_SAMPLE_SCHEMA) + 1
-    HDF5_SAMPLE_SCHEMA[colname] = coltype(pos=colpos)
+            HDF5_SCHEMA.add_column(colname=n, coltype=tables.Float32Col)
 
 
 def _prepare_hdf5_file_if_not_yet_existing():
@@ -434,7 +462,7 @@ def _prepare_hdf5_file_if_not_yet_existing():
     hdf5table = hdf5file.create_table(
         where='/',
         name='messer_timeseries',
-        description=HDF5_SAMPLE_SCHEMA,
+        description=HDF5_SCHEMA.schema_dict,
         title='messer.py time series, invocation at ' + INVOCATION_TIME_LOCAL_STRING,
     )
 
