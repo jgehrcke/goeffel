@@ -15,24 +15,25 @@ Highlights:
   longevity experiments when the program you want to monitor is expected to
   occasionally restart (for instance as of fail-over scenarios).
 - Messer helps keeping the data organized: the time series data is written into
-  an [HDF5](https://en.wikipedia.org/wiki/Hierarchical_Data_Format) file (
-  annotate with relevant metadata such as program invocation time, system
+  [HDF5](https://en.wikipedia.org/wiki/Hierarchical_Data_Format) files (
+  annotated with relevant metadata such as program invocation time, system
   hostname, and Messer software version).
 - Messer comes with a data plotting tool (separate from the data acquisition
   program).
 
 Messer values measurement correctness very highly. Some aspects:
 
-- It uses a sampling interval of 0.5 seconds for making narrow spikes visible.
-  Note: the highest meaningful sampling rate is limited by the kernel's timer
-  and bookkeeping system.
+- It can use a sampling interval of 0.5 seconds for making narrow spikes
+  visible. Note: the highest meaningful sampling rate is limited by the kernel's
+  timer and bookkeeping system.
 - The core sampling loop does little work besides the measurement itself.
 - The measurement process which runs the core sampling loop writes each sample
-  to a queue. Messer uses a separate process for consuming this queue and for
-  emitting the time series data for later inspection (that is, the measurement
-  is decoupled from persisting the data via an in-memory buffer, making the
-  sampling rate more predictable upon disk write latency spikes, or generally
-  upon backpressure).
+  to a queue. A separate process consumes this queue and persists the time
+  series data to disk, for later inspection. This keeps the sampling rate
+  predictable upon disk write latency spikes, or generally upon backpressure.
+  This matters especially in cloud environments where we sometimes see fsync
+  latencies of multiple seconds).
+
 
 ## Motivation
 
@@ -64,6 +65,10 @@ concerns between persisting the data to disk, performing the measurement itself,
 and plotting the data, making it too error-prone and not production-ready.
 
 ## Notes
+
+- Messer implements an output file rotation and retention concept making it
+  suitable for long-term usage (if the time series data from a measurement run
+  grows beyond a certain amount, Messer removes the oldest chunk).
 
 - Messer tries to not asymmetrically hide measurement uncertainty. For example,
   you might see it measure a CPU utilization of a single-threaded process
@@ -114,9 +119,47 @@ The ID of the CPU that this process is currently running on.
 Momentary state at sampling time.
 
 
+#### `proc_cpu_util_percent_total`
+
+The CPU utilization of the process in `percent`.
+
+Mean over the past sampling interval.
+
+If the inspected process is known to contain just a single thread then
+this can still sometimes be larger than 100 % as of measurement errors. If the
+process contains more than one thread then this can go far beyond 100 %.
+
+This is the sum of the time spent in user space and in kernel space. For a
+more fine-grained picture the following two metrics are also available
+`proc_cpu_util_percent_user`, and `proc_cpu_util_percent_system`.
+
+
+#### `proc_num_threads`
+
+The number of threads in the process.
+
+Momentary state at sampling time.
+
+
+#### `proc_num_ip_sockets_open`
+
+The number of sockets currently being open. This includes IPv4 and IPv6 and does
+not distinguish between TCP and UDP (in case of TCP the connection state also
+does not matter).
+
+Momentary state at sampling time.
+
+
+#### `proc_num_fds`
+
+The number of file descriptors currently opened by this process.
+
+Momentary state at sampling time.
+
+
 #### `proc_disk_read_throughput_mibps` and `proc_disk_write_throughput_mibps`
 
-Measures the disk I/O throughput of the inspected process, in `MiB/s`.
+The disk I/O throughput of the inspected process, in `MiB/s`.
 
 Based on Linux' `/proc/<pid>/io` `rchar` and `wchar`
 
