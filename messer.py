@@ -498,22 +498,33 @@ def _prepare_csv_file_if_not_yet_existing():
 
 def sample_writer_process(queue):
     """
-    This is being run in a child process. The parent and the child are connected
-    with a classical pipe for inter-process communication, on top of which an
-    atomic message queue is implemented for passing messages from the parent
-    process to the child process. Each message is either a sample object
-    (collection of values for a given timestamp), or `None` to signal the child
-    process that it is supposed to properly shut down and exit.
+    This function is being run in a child process.
 
-    Ignore SIGINT (default handler in CPython is to raise KeyboardInterrupt,
-    which is undesired here). The parent handles it, and instructs the child to
-    clean up as part of handling it.
+    The parent process runs the measurement loop (sample producer). The child
+    process' main responsibility is to output the data to disk (sample
+    consumer).
 
-    For the disk I/O operations performed here to not affect the main loop (as
-    of disk write hiccups / latencies) this is being run in a separate process.
-    That is, so the sampling (measurement) itself is decoupled from persisting
-    the data through a Queue-based buffer (in the parent process) between both
-    processes.
+    The parent and the child are connected through a classical pipe for
+    inter-process communication, on top of which an atomic message queue is used
+    for passing messages from the parent process to the child process.
+
+    Each message is either a sample object (a tuple of values for a given
+    timestamp), or `None` to signal the child process that it is supposed to
+    properly shut down and exit.
+
+    Ignore SIGINT in the child process (default handler in CPython is to raise
+    KeyboardInterrupt, which is undesired here). The parent handles SIGINT, and
+    instructs the child to clean up as part of handling it.
+
+    This architecture decouples the measurement loop from persisting the data.
+    The size of the Queue-based buffer (in the parent process) determines how
+    strongly the two processes are (de)coupled.
+
+    As of this architecture the I/O operations performed here (in the child
+    process, responsible for persisting the data) are unlikely to negatively
+    affect the main measurement loop in the parent process. This matters
+    especially upon disk write latency hiccups (in cloud environments we
+    regularly see fsync latencies of multiple seconds).
     """
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
@@ -522,13 +533,16 @@ def sample_writer_process(queue):
     first_sample_written = False
 
     while True:
+
+        # Attempt to get next sample from the parent process through the atomic
+        # message queue. This is a blocking call.
         sample = queue.get()
         t_after_get = time.monotonic()
 
         # `sample` is expected to be an n-tuple or None. Shut down worker
         # process in case of `None`.
         if sample is None:
-            log.debug('Sample writer process: shutting down')
+            log.debug('Sample consumer process: shutting down')
             break
 
         # Simulate I/O slowness.
@@ -537,17 +551,19 @@ def sample_writer_process(queue):
 
         _write_sample_csv_if_enabled(sample)
 
-        # Write N samples to disk together (it's fine to potentially lose a
+        # Write N samples to disk together (it iss fine to potentially lose a
         # couple of seconds of time series data). Also write very first sample
-        # immediately so that writing the HDF5 file fails fast (if it fails...
-        # , instead of failing only after collecting the first N samples).
+        # immediately so that writing the HDF5 file fails fast (if it fails,
+        # instead of failing only after collecting the first N samples).
 
         if not first_sample_written:
             _write_samples_hdf5_if_enabled([sample])
             first_sample_written = True
+
         elif len(hdf5_sample_buffer) == 20:
             _write_samples_hdf5_if_enabled(hdf5_sample_buffer)
             hdf5_sample_buffer = []
+
         else:
             hdf5_sample_buffer.append(sample)
 
