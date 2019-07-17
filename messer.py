@@ -111,6 +111,7 @@ import sys
 import time
 import os
 import platform
+import re
 import signal
 import subprocess
 import multiprocessing
@@ -575,13 +576,12 @@ def _hdf5_file_rotate_if_required():
     if not os.path.exists(OUTFILE_PATH_HDF5):
         return
 
-    #maxmb = 20
-    maxmb = 0.015
+    maxmb = 0.013
     cursize = os.path.getsize(OUTFILE_PATH_HDF5)
     maxsize = 1024 * 1024 * maxmb
 
     if cursize < maxsize:
-        log.debug('Do not rotate: %s is smaller than %s', cursize, maxsize)
+        log.debug('Do not rotate HDF5 file: %s B < %s B', cursize, maxsize)
         return
 
     log.info('HDF5 file is larger than %s MB, rotate', maxmb)
@@ -592,21 +592,102 @@ def _hdf5_file_rotate_if_required():
     # the path contains this index, then increment the index by 1.
     global HDF5_FILE_SERIES_INDEX
 
-    new_file_path = OUTFILE_PATH_HDF5 + '.' + str(HDF5_FILE_SERIES_INDEX).zfill(3)
+    # Note(JP): automated file deletion further below relies on the index being
+    # *appended* with *4* dights, and it relies on a larger index meaning "more
+    # recent" data.
+    new_path = OUTFILE_PATH_HDF5 + '.' + str(HDF5_FILE_SERIES_INDEX).zfill(4)
 
-    if os.path.exists(new_file_path):
-        log.error('File unexpectedly exists already: %s', new_file_path)
+    if os.path.exists(new_path):
+        log.error('File unexpectedly exists already: %s', new_path)
         log.error('Erroring out instead of overwriting')
         sys.exit(1)
 
-    log.info('Move current HDF5 file to %s', new_file_path)
+    log.info('Move current HDF5 file to %s', new_path)
 
     # If this fails the program crashes which is as of now desired behavior.
-    os.rename(OUTFILE_PATH_HDF5, new_file_path)
+    os.rename(OUTFILE_PATH_HDF5, new_path)
 
     # The next HDF5 file created by `_prepare_hdf5_file_if_not_yet_existing()`
     # will contain the incremented value in its meta data.
     HDF5_FILE_SERIES_INDEX += 1
+
+    log.info('Check if oldest file in series should be deleted')
+    while _hdf5_remove_oldest_file_if_required():
+        # Do this in a loop because otherwise the program can remove at most one
+        # file per file rotation cycle. While this is enough in almost all of
+        # the cases, it is not enough if one file deletion attempt fails as of
+        # a transient problem.
+        log.info('Deleted a file, check again')
+
+
+def _hdf5_remove_oldest_file_if_required():
+    """Return `True` if a file was deleted (invoke again in this case).
+
+    Return `None` if no file needed to be deleted.
+    """
+    # If the collection of HDF5 files belonging to this series surpasses a size
+    # threshold then start deleting the oldest files (lowest index).
+    hdf5_files_dir_path = os.path.dirname(os.path.abspath(OUTFILE_PATH_HDF5))
+    hdf5_outfile_basename = os.path.basename(OUTFILE_PATH_HDF5)
+    filenames = [fn for fn in os.listdir(hdf5_files_dir_path) if \
+        fn.startswith(hdf5_outfile_basename)
+    ]
+    filepaths = [os.path.join(hdf5_files_dir_path, fn) for fn in filenames]
+    accumulated_size_bytes = sum(os.path.getsize(p) for p in filepaths)
+    log.info(
+        'Accumulated size of files in series: %s Bytes (files: %s)',
+        accumulated_size_bytes,
+        ', '.join(filenames)
+    )
+    max_series_size_mb = 0.03
+    maxsize = 1024 * 1024 * max_series_size_mb
+
+    if accumulated_size_bytes < maxsize:
+        log.info(
+            'Do not delete the oldest file in series: %s Bytes < %s Bytes',
+            accumulated_size_bytes,
+            maxsize
+        )
+        return
+
+    log.info(
+        'Accumulated size surpasses limit: %s Bytes > %s Bytes',
+        accumulated_size_bytes,
+        maxsize
+    )
+
+    # Rely on series index appended to the file name.
+    # >>> re.match('^.+\.[0-9]{4}$', '.0001')
+    # >>> re.match('^.*\.[0-9]{4}$', '0001')
+    # >>> re.match('^.*\.[0-9]{4}$', 'foo.0001')
+    # <re.Match object; span=(0, 8), match='foo.0001'>
+    # >>> re.match('^.*\.[0-9]{4}$', 'foo.00001')
+    # >>>
+    filenames_with_series_index = [
+        fp for fp in filenames if \
+        re.match('^.*\.[0-9]{4}$', fp) is not None
+    ]
+
+    # Rely on `sorted` to sort as desired, ascendingly:
+    # >>> sorted(['foo-0005', 'foo-0003', 'foo-0002', 'foo-0004'])
+    # ['foo-0002', 'foo-0003', 'foo-0004', 'foo-0005']
+    filenames_with_series_index_sorted = sorted(filenames_with_series_index)
+    filepaths_sorted = [
+        os.path.join(hdf5_files_dir_path, fn) for \
+        fn in filenames_with_series_index_sorted
+    ]
+
+    # The first element is the file path to the oldest file in the series.
+    log.info('Identified oldest file in series: %s', filepaths_sorted[0])
+    log.info('Removing file: %s', filepaths_sorted[0])
+    try:
+        # If this fails (for whichever reason) do not crash the program. Maybe
+        # the file was removed underneath us. Maybe there was a transient
+        # problem and removal succeeds upon next attempt. It's not worth
+        # crashing the data acquisition.
+        os.remove(filepaths_sorted[0])
+    except Exception as e:
+        log.warning('File removal failed: %s', str(e))
 
 
 def _write_samples_hdf5_if_enabled(samples):
@@ -1056,6 +1137,7 @@ def get_hostname():
         log.info('Cannot get system hostname: %s', e)
         hostname = ''
     return hostname
+
 
 def pid_from_cmd(pid_command):
     """
