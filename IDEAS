@@ -37,6 +37,12 @@
 
 ## Misc notes
 
+- add (internal) config value for number of samples written in a single HDF5
+  update.
+
+- add (internal) configuration values for te HDF5 file rotation / retention
+  logic.
+
 - build a mode without process-specific monitoring (no pid, no pid command)?
 
 - build a mode where disk IO stats are collected for all disks?

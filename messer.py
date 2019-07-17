@@ -376,8 +376,6 @@ def main():
 
 
 def process_outfile_args():
-    global OUTFILE_PATH_HDF5
-    global OUTFILE_PATH_CSV
 
     # Determine path for HDF5 output file. `None` signals to not write one.
     if ARGS.no_hdf5:
@@ -410,6 +408,8 @@ def process_outfile_args():
         raise NotImplementedError
 
     # Expose config to the rest of the program.
+    global OUTFILE_PATH_HDF5
+    global OUTFILE_PATH_CSV
     OUTFILE_PATH_HDF5 = path_hdf5
     OUTFILE_PATH_CSV = path_csv
 
