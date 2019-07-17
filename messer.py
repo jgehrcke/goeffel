@@ -40,25 +40,9 @@ the utilization of system-wide resources making it straightforward to put the
 process-specific metrics into context.
 
 This program has been written for and tested on CPython 3.5 and 3.6 on Linux.
-"""
 
-import argparse
-import textwrap
-import logging
-import sys
-import time
-import os
-import platform
-import signal
-import subprocess
-import multiprocessing
+---
 
-from collections import OrderedDict
-from datetime import datetime
-
-import tables
-
-"""
 This was born out of a need for solid tooling. We started with pidstat from
 sysstat, launched in the following manner:
 
@@ -120,49 +104,135 @@ References for interpreting output:
     - https://stackoverflow.com/q/35837243/145400
 """
 
+import argparse
+import textwrap
+import logging
+import sys
+import time
+import os
+import platform
+import re
+import signal
+import subprocess
+import multiprocessing
 
-log = logging.getLogger()
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s.%(msecs)03d %(levelname)s: %(message)s",
-    datefmt="%y%m%d-%H:%M:%S"
-)
+from collections import OrderedDict
+from datetime import datetime
+
+import tables
 
 
-# The sample interval should ideally be larger than 0.2 seconds so that kernel
-# counter update errors and other timing errors do not dominate the data emitted
-# by this program. Relevant reference: https://elinux.org/Kernel_Timer_Systems
-# From the `cpustat` documentation: "Linux CPU time accounting is done in terms
-# of whole "clock ticks", which are often 100ms. This can cause some strange
-# values when sampling every 200ms.""
+# The sample interval should ideallynot be smaller than 0.5 seconds so that
+# kernel counter update errors and other timing errors do not dominate the data
+# emitted by this program. Relevant reference:
+# https://elinux.org/Kernel_Timer_Systems From the `cpustat` documentation:
+# "Linux CPU time accounting is done in terms of whole "clock ticks", which are
+# often 100ms. This can cause some strange values when sampling every 200ms.""
 SAMPLE_INTERVAL_SECONDS = 0.5
 
+# If the program is invoked with a PID command and the process goes away then
+# the PID command is invoked periodically for polling for a new PID. This
+# constant determines the polling interval.
+PROCESS_PID_POLL_INTERVAL_SECONDS = 1.0
 
-PROCESS_PID_POLL_INTERVAL_SECONDS = 2.0
+# No strong use case so far. This value is added to the HDF5 file metadata.
+MESSER_SAMPLE_SCHEMA_VERSION = 1
 
-# Measure invocation time (is consumed in various places).
+# For choosing compression parameters, interoperability and reliability
+# (reducing risk for corruption) matters more than throughput.
+HDF5_COMP_FILTER = tables.Filters(complevel=9, complib='zlib', fletcher32=True)
+
+CSV_COLUMN_HEADER_WRITTEN = False
+OUTFILE_PATH_HDF5 = None
+OUTFILE_PATH_CSV = None
+
+# Will be populated by ArgumentParser, with options from the command line.
+ARGS = None
+
+# Measure invocation time (is consumed in various places, e.g. written to
+# the HDF5 metadata).
 INVOCATION_TIME_UNIX_TIMESTAMP = time.time()
 INVOCATION_TIME_LOCAL_STRING = datetime.fromtimestamp(
     INVOCATION_TIME_UNIX_TIMESTAMP).strftime(format='%Y%m%d_%H%M%S')
 
 
-MESSER_SAMPLE_SCHEMA_VERSION = 1
+log = logging.getLogger()
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s.%(msecs)03d %(levelname)s: %(message)s",
+    datefmt="%y%m%d-%H:%M:%S"
+)
 
 
-# Will be populated by ArgumentParser, with options from the command line.
-ARGS = None
+class HDF5Schema:
+    """
+    Manage a pytables HDF5 schema dictionary.
+
+    The attribute `_schema_dict`, once populated, will define the set of columns
+    stored in the HDF5 file. The order of columns as stored in the HDF5 file
+    will appear as given by the `pos` arguments (provided to the indvidual type
+    constructors below).
+
+    The `__init__()` method below defines the type and order of the set of
+    default columns. More columns can be added dynamically by the program via
+    the `add_column()` method.
+    """
+
+    def __init__(self):
+
+        self.schema_dict =  {
+            # Store time in two formats: for flexible analysis store a 64 bit
+            # unix timestamp (subsecond precision). For convenience, also store
+            # a text representation of the local time (also with subsecond
+            # precision).
+            'unixtime': tables.Time64Col(pos=0),
+            'isotime_local': tables.StringCol(26, pos=1),
+        }
+
+        # Add more default columns, in the order as enumerated here.
+        default_columns = OrderedDict((
+            ('proc_pid', tables.Int32Col),
+            ('proc_cpu_util_percent_total', tables.Float32Col),
+            ('proc_cpu_util_percent_user', tables.Float32Col),
+            ('proc_cpu_util_percent_system', tables.Float32Col),
+            ('proc_cpu_id', tables.Int16Col),
+            ('proc_ctx_switch_rate_hz', tables.Float32Col),
+            ('proc_disk_read_throughput_mibps', tables.Float32Col),
+            ('proc_disk_write_throughput_mibps', tables.Float32Col),
+            ('proc_disk_read_rate_hz', tables.Float32Col),
+            ('proc_disk_write_rate_hz', tables.Float32Col),
+            ('proc_num_ip_sockets_open', tables.Int16Col),
+            ('proc_num_threads', tables.Int16Col),
+            ('proc_num_fds', tables.UInt32Col),
+            ('proc_mem_rss_percent', tables.Float16Col),
+            ('proc_mem_rss', tables.UInt64Col),
+            ('proc_mem_vms', tables.UInt64Col),
+            ('proc_mem_dirty', tables.UInt32Col),
+        ))
+
+        for colname, coltype in default_columns.items():
+            self.add_column(colname, coltype)
+
+    def add_column(self, colname, coltype):
+        """Add a column to the schema.
+
+        Columns will appear in the HDF5 file in the same order as this function
+        is called.
+        """
+        assert colname not in self.schema_dict
+        colpos = len(self.schema_dict) + 1
+        self.schema_dict[colname] = coltype(pos=colpos)
 
 
-CSV_COLUMN_HEADER_WRITTEN = False
+# The HDF5Schema instance is meant to be used as a singleton. Can be mutated
+# (extended) from anywhere in the program.
+HDF5_SCHEMA = HDF5Schema()
 
-
-OUTFILE_PATH_HDF5 = None
-OUTFILE_PATH_CSV = None
-
-
-# For choosing compression parameters, interoperability and reliability
-# (reducing risk for corruption) matters more than throughput.
-HDF5_COMP_FILTER = tables.Filters(complevel=9, complib='zlib', fletcher32=True)
+# When the HDF5 file is being rotated (as of growing beyond a file size limit)
+# then this index is incremented by 1. This global variable keeps state (is
+# modified from code below). The first file in a series has index 1. The index
+# is written to the HDF5 table meta data section.
+HDF5_FILE_SERIES_INDEX = 1
 
 
 def main():
@@ -172,14 +242,6 @@ def main():
         description='A tool for measuring process and system resource utilization.',
         epilog=textwrap.dedent(__doc__).strip()
     )
-
-    # Note(JP): build a mode without process-specific monitoring (no pid, no pid
-    # command)?
-
-    # Note(JP): build a mode where disk IO stats are collected for all disks?
-
-    # TODO(JP): measure performance impact of messer with another instance of
-    # messer.
 
     what = parser.add_mutually_exclusive_group(required=True)
 
@@ -269,7 +331,7 @@ def main():
     if not ARGS.no_system_metrics:
 
         for cn in ('system_loadavg1', 'system_loadavg5','system_loadavg15'):
-            hdf5_schema_add_column(colname=cn, coltype=tables.Float16Col)
+            HDF5_SCHEMA.add_column(colname=cn, coltype=tables.Float16Col)
 
         for cn in (
                 'system_mem_available',
@@ -281,15 +343,15 @@ def main():
                 'system_mem_cached',
                 'system_mem_active',
                 'system_mem_inactive'):
-            hdf5_schema_add_column(colname=cn, coltype=tables.UInt64Col)
+            HDF5_SCHEMA.add_column(colname=cn, coltype=tables.UInt64Col)
 
     # Set up the infrastructure for decoupling measurement (sample collection)
     # from persisting the data.
     samplequeue = multiprocessing.Queue()
 
     log.info(
-        'Collect time series for the folling metrics: \n  %s',
-        '\n  '.join(k for k in HDF5_SAMPLE_SCHEMA.keys()))
+        'Collect time series for the following metrics: \n  %s',
+        '\n  '.join(k for k in HDF5_SCHEMA.schema_dict.keys()))
 
     samplewriter = multiprocessing.Process(
         target=sample_writer_process,
@@ -307,15 +369,13 @@ def main():
         # the sample writer process to terminate.
         samplequeue.put(None)
         samplequeue.close()
-        log.info('Wait for producer buffer to be empty')
+        log.info('Wait for producer buffer to become empty')
         samplequeue.join_thread()
         samplewriter.join()
-        log.debug('Sample writer process terminated')
+        log.info('Sample writer process terminated')
 
 
 def process_outfile_args():
-    global OUTFILE_PATH_HDF5
-    global OUTFILE_PATH_CSV
 
     # Determine path for HDF5 output file. `None` signals to not write one.
     if ARGS.no_hdf5:
@@ -348,6 +408,8 @@ def process_outfile_args():
         raise NotImplementedError
 
     # Expose config to the rest of the program.
+    global OUTFILE_PATH_HDF5
+    global OUTFILE_PATH_CSV
     OUTFILE_PATH_HDF5 = path_hdf5
     OUTFILE_PATH_CSV = path_csv
 
@@ -378,39 +440,7 @@ def process_diskstats_args():
         # accounting for certain disk metrics.
 
         for n in column_names:
-            hdf5_schema_add_column(colname=n, coltype=tables.Float32Col)
-
-
-# This defines the initial set of columns, more columns can be added dynamically
-# by the program, based on discovery or command line arguments.
-HDF5_SAMPLE_SCHEMA = {
-    # Store time in two formats: for flexible analyses store the unix time stamp
-    # with subsecond precision, and for convenience it is good to also have a
-    # string representation of the local time (also with subsecond precision)
-    # stored.
-    'unixtime': tables.Time64Col(pos=0),
-    'isotime_local': tables.StringCol(26, pos=1),
-
-    # Process-specific metrics.
-    'proc_pid': tables.Int32Col(pos=3),
-    'proc_util_percent_total': tables.Float32Col(pos=4),
-    'proc_util_percent_user': tables.Float32Col(pos=5),
-    'proc_util_percent_system': tables.Float32Col(pos=6),
-    'proc_io_read_throughput_mibps': tables.Float32Col(pos=7),
-    'proc_io_write_throughput_mibps': tables.Float32Col(pos=8),
-    'proc_io_read_rate_hz': tables.Float32Col(pos=9),
-    'proc_io_write_rate_hz': tables.Float32Col(pos=10),
-    'proc_mem_rss': tables.UInt64Col(pos=11),
-    'proc_mem_vms': tables.UInt64Col(pos=12),
-    'proc_mem_dirty': tables.UInt32Col(pos=13),
-    'proc_num_fds': tables.UInt32Col(pos=14),
-}
-
-
-def hdf5_schema_add_column(colname, coltype):
-    assert colname not in HDF5_SAMPLE_SCHEMA
-    colpos = len(HDF5_SAMPLE_SCHEMA) + 1
-    HDF5_SAMPLE_SCHEMA[colname] = coltype(pos=colpos)
+            HDF5_SCHEMA.add_column(colname=n, coltype=tables.Float32Col)
 
 
 def _prepare_hdf5_file_if_not_yet_existing():
@@ -426,8 +456,6 @@ def _prepare_hdf5_file_if_not_yet_existing():
     # >>> 24 * 60 * 60 * 30
     # 2592000
 
-    # TODO(JP): error out if file exists. At least warn.
-
     log.info('Create HDF5 file: %s', OUTFILE_PATH_HDF5)
 
     hdf5file = tables.open_file(
@@ -439,7 +467,7 @@ def _prepare_hdf5_file_if_not_yet_existing():
     hdf5table = hdf5file.create_table(
         where='/',
         name='messer_timeseries',
-        description=HDF5_SAMPLE_SCHEMA,
+        description=HDF5_SCHEMA.schema_dict,
         title='messer.py time series, invocation at ' + INVOCATION_TIME_LOCAL_STRING,
     )
 
@@ -452,6 +480,7 @@ def _prepare_hdf5_file_if_not_yet_existing():
     hdf5table.attrs.messer_pid_command = ARGS.pid_command
     hdf5table.attrs.messer_pid = ARGS.pid
     hdf5table.attrs.messer_sampling_interval_seconds = SAMPLE_INTERVAL_SECONDS
+    hdf5table.attrs.messer_file_series_index = HDF5_FILE_SERIES_INDEX
     hdf5file.close()
 
 
@@ -470,22 +499,33 @@ def _prepare_csv_file_if_not_yet_existing():
 
 def sample_writer_process(queue):
     """
-    This is being run in a child process. The parent and the child are connected
-    with a classical pipe for inter-process communication, on top of which an
-    atomic message queue is implemented for passing messages from the parent
-    process to the child process. Each message is either a sample object
-    (collection of values for a given timestamp), or `None` to signal the child
-    process that it is supposed to properly shut down and exit.
+    This function is being run in a child process.
 
-    Ignore SIGINT (default handler in CPython is to raise KeyboardInterrupt,
-    which is undesired here). The parent handles it, and instructs the child to
-    clean up as part of handling it.
+    The parent process runs the measurement loop (sample producer). The child
+    process' main responsibility is to output the data to disk (sample
+    consumer).
 
-    For the disk I/O operations performed here to not affect the main loop (as
-    of disk write hiccups / latencies) this is being run in a separate process.
-    That is, so the sampling (measurement) itself is decoupled from persisting
-    the data through a Queue-based buffer (in the parent process) between both
-    processes.
+    The parent and the child are connected through a classical pipe for
+    inter-process communication, on top of which an atomic message queue is used
+    for passing messages from the parent process to the child process.
+
+    Each message is either a sample object (a tuple of values for a given
+    timestamp), or `None` to signal the child process that it is supposed to
+    properly shut down and exit.
+
+    Ignore SIGINT in the child process (default handler in CPython is to raise
+    KeyboardInterrupt, which is undesired here). The parent handles SIGINT, and
+    instructs the child to clean up as part of handling it.
+
+    This architecture decouples the measurement loop from persisting the data.
+    The size of the Queue-based buffer (in the parent process) determines how
+    strongly the two processes are (de)coupled.
+
+    As of this architecture the I/O operations performed here (in the child
+    process, responsible for persisting the data) are unlikely to negatively
+    affect the main measurement loop in the parent process. This matters
+    especially upon disk write latency hiccups (in cloud environments we
+    regularly see fsync latencies of multiple seconds).
     """
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
@@ -494,13 +534,16 @@ def sample_writer_process(queue):
     first_sample_written = False
 
     while True:
+
+        # Attempt to get next sample from the parent process through the atomic
+        # message queue. This is a blocking call.
         sample = queue.get()
         t_after_get = time.monotonic()
 
         # `sample` is expected to be an n-tuple or None. Shut down worker
         # process in case of `None`.
         if sample is None:
-            log.debug('Sample writer process: shutting down')
+            log.debug('Sample consumer process: shutting down')
             break
 
         # Simulate I/O slowness.
@@ -509,36 +552,158 @@ def sample_writer_process(queue):
 
         _write_sample_csv_if_enabled(sample)
 
-        # Write N samples to disk together (it's fine to potentially lose a
+        # Write N samples to disk together (it iss fine to potentially lose a
         # couple of seconds of time series data). Also write very first sample
-        # immediately so that writing the HDF5 file fails fast (if it fails...
-        # , instead of failing only after collecting the first N samples).
+        # immediately so that writing the HDF5 file fails fast (if it fails,
+        # instead of failing only after collecting the first N samples).
 
         if not first_sample_written:
             _write_samples_hdf5_if_enabled([sample])
             first_sample_written = True
+
         elif len(hdf5_sample_buffer) == 20:
             _write_samples_hdf5_if_enabled(hdf5_sample_buffer)
             hdf5_sample_buffer = []
+
         else:
             hdf5_sample_buffer.append(sample)
 
         log.debug('Consumer iteration: %.6f s', time.monotonic() - t_after_get)
 
 
+def _hdf5_file_rotate_if_required():
+    # During the first iteration the file does not yet exist.
+    if not os.path.exists(OUTFILE_PATH_HDF5):
+        return
+
+    maxmb = 0.013
+    cursize = os.path.getsize(OUTFILE_PATH_HDF5)
+    maxsize = 1024 * 1024 * maxmb
+
+    if cursize < maxsize:
+        log.debug('Do not rotate HDF5 file: %s B < %s B', cursize, maxsize)
+        return
+
+    log.info('HDF5 file is larger than %s MB, rotate', maxmb)
+
+    # The current `HDF5_FILE_SERIES_INDEX` is the source of truth. The output
+    # file currently being written to does not contain this index in its file
+    # name (it's in the HDF5 meta data however). Now move that file so that
+    # the path contains this index, then increment the index by 1.
+    global HDF5_FILE_SERIES_INDEX
+
+    # Note(JP): automated file deletion further below relies on the index being
+    # *appended* with *4* dights, and it relies on a larger index meaning "more
+    # recent" data.
+    new_path = OUTFILE_PATH_HDF5 + '.' + str(HDF5_FILE_SERIES_INDEX).zfill(4)
+
+    if os.path.exists(new_path):
+        log.error('File unexpectedly exists already: %s', new_path)
+        log.error('Erroring out instead of overwriting')
+        sys.exit(1)
+
+    log.info('Move current HDF5 file to %s', new_path)
+
+    # If this fails the program crashes which is as of now desired behavior.
+    os.rename(OUTFILE_PATH_HDF5, new_path)
+
+    # The next HDF5 file created by `_prepare_hdf5_file_if_not_yet_existing()`
+    # will contain the incremented value in its meta data.
+    HDF5_FILE_SERIES_INDEX += 1
+
+    log.info('Check if oldest file in series should be deleted')
+    while _hdf5_remove_oldest_file_if_required():
+        # Do this in a loop because otherwise the program can remove at most one
+        # file per file rotation cycle. While this is enough in almost all of
+        # the cases, it is not enough if one file deletion attempt fails as of
+        # a transient problem.
+        log.info('Deleted a file, check again')
+
+
+def _hdf5_remove_oldest_file_if_required():
+    """Return `True` if a file was deleted (invoke again in this case).
+
+    Return `None` if no file needed to be deleted.
+    """
+    # If the collection of HDF5 files belonging to this series surpasses a size
+    # threshold then start deleting the oldest files (lowest index).
+    hdf5_files_dir_path = os.path.dirname(os.path.abspath(OUTFILE_PATH_HDF5))
+    hdf5_outfile_basename = os.path.basename(OUTFILE_PATH_HDF5)
+    filenames = [fn for fn in os.listdir(hdf5_files_dir_path) if \
+        fn.startswith(hdf5_outfile_basename)
+    ]
+    filepaths = [os.path.join(hdf5_files_dir_path, fn) for fn in filenames]
+    accumulated_size_bytes = sum(os.path.getsize(p) for p in filepaths)
+    log.info(
+        'Accumulated size of files in series: %s Bytes (files: %s)',
+        accumulated_size_bytes,
+        ', '.join(filenames)
+    )
+    max_series_size_mb = 0.03
+    maxsize = 1024 * 1024 * max_series_size_mb
+
+    if accumulated_size_bytes < maxsize:
+        log.info(
+            'Do not delete the oldest file in series: %s Bytes < %s Bytes',
+            accumulated_size_bytes,
+            maxsize
+        )
+        return
+
+    log.info(
+        'Accumulated size surpasses limit: %s Bytes > %s Bytes',
+        accumulated_size_bytes,
+        maxsize
+    )
+
+    # Rely on series index appended to the file name.
+    # >>> re.match('^.+\.[0-9]{4}$', '.0001')
+    # >>> re.match('^.*\.[0-9]{4}$', '0001')
+    # >>> re.match('^.*\.[0-9]{4}$', 'foo.0001')
+    # <re.Match object; span=(0, 8), match='foo.0001'>
+    # >>> re.match('^.*\.[0-9]{4}$', 'foo.00001')
+    # >>>
+    filenames_with_series_index = [
+        fp for fp in filenames if \
+        re.match('^.*\.[0-9]{4}$', fp) is not None
+    ]
+
+    # Rely on `sorted` to sort as desired, ascendingly:
+    # >>> sorted(['foo-0005', 'foo-0003', 'foo-0002', 'foo-0004'])
+    # ['foo-0002', 'foo-0003', 'foo-0004', 'foo-0005']
+    filenames_with_series_index_sorted = sorted(filenames_with_series_index)
+    filepaths_sorted = [
+        os.path.join(hdf5_files_dir_path, fn) for \
+        fn in filenames_with_series_index_sorted
+    ]
+
+    # The first element is the file path to the oldest file in the series.
+    log.info('Identified oldest file in series: %s', filepaths_sorted[0])
+    log.info('Removing file: %s', filepaths_sorted[0])
+    try:
+        # If this fails (for whichever reason) do not crash the program. Maybe
+        # the file was removed underneath us. Maybe there was a transient
+        # problem and removal succeeds upon next attempt. It's not worth
+        # crashing the data acquisition.
+        os.remove(filepaths_sorted[0])
+    except Exception as e:
+        log.warning('File removal failed: %s', str(e))
+
+
 def _write_samples_hdf5_if_enabled(samples):
     """
     For writing every sample go through the complete life cycle from open()ing
-    the file to close()ing the file to minimize the risk for data corruption. If
+    the HDF5 file to close()ing it, to minimize the risk for data corruption. If
     doing this once per SAMPLE_INTERVAL_SECONDS generates too much overhead a
-    proper solution would be to write more than one sample (row) in one go.
+    proper solution is to write more than one sample (row) in one go.
     """
     if OUTFILE_PATH_HDF5 is None:
-        # That *is* the signal to not write an HDF5 output file.
+        # That is the signal to not write an HDF5 output file.
         return
 
     t0 = time.monotonic()
 
+    _hdf5_file_rotate_if_required()
     _prepare_hdf5_file_if_not_yet_existing()
 
     with tables.open_file(OUTFILE_PATH_HDF5, 'a', filters=HDF5_COMP_FILTER) as f:
@@ -560,7 +725,11 @@ def _write_samples_hdf5_if_enabled(samples):
         # HDF5 perspective, but also from the kernel's / file system's
         # perspective.
 
-    log.debug('Updated HDF5 file (took %.5f s)', time.monotonic() - t0)
+    log.info(
+        'Updated HDF5 file: wrote %s sample(s) in %.5f s',
+        len(samples),
+        time.monotonic() - t0,
+    )
 
 
 def _write_sample_csv_if_enabled(sample):
@@ -671,6 +840,17 @@ def generate_samples(pid):
     # already errors out when the PID is unknown.
     process = psutil.Process(pid)
 
+    process_attrs_to_get_as_dict = [
+        'cpu_times',
+        'io_counters',
+        'memory_info',
+        'num_fds',
+        'cpu_num',
+        'memory_percent',
+        'num_threads',
+        'num_ctx_switches'
+    ]
+
     # `t_rel1` is the reference timestamp for differential analysis where a time
     # difference is in the denominator of a calculation:
     #
@@ -683,7 +863,7 @@ def generate_samples(pid):
     # instead of the system time and then get the first set of data points
     # relevant for the differential analysis immediately after getting t_rel1.
     t_rel1 = time.monotonic()
-    procstats1 = process.as_dict(attrs=['cpu_times', 'io_counters', 'memory_info', 'num_fds'])
+    procstats1 = process.as_dict(attrs=process_attrs_to_get_as_dict)
     diskstats1, diskstats2 = None, None
     if ARGS.diskstats:
         diskstats1 = psutil.disk_io_counters(perdisk=True)
@@ -720,13 +900,25 @@ def generate_samples(pid):
         # by default.
 
         t_rel2 = time.monotonic()
-        procstats2 = process.as_dict(attrs=['cpu_times', 'io_counters', 'memory_info', 'num_fds'])
+        procstats2 = process.as_dict(attrs=process_attrs_to_get_as_dict)
         if ARGS.diskstats:
             diskstats2 = psutil.disk_io_counters(perdisk=True)
 
         # Now the data for the timing-sensitive differential anlysis has been
-        # acquired. What follows is the acquisition of system-wide metrics.
+        # acquired. What follows is more time-costly data acquisition for
+        # process-specific metrics.
 
+        # Get momentary snapshot of the TCP/UDP sockets used by the process.
+        # This is a relatively costly operation, taking more than 1/100 of a
+        # second:
+        #
+        #    timeit('p.connections()', number=100, globals=globals()) / 100
+        #    0.020052049085497858
+        #
+        # `'inet'` means: get all TCP or UDP sockets of type IPv4 and IPv6.
+        ip_sockets = process.connections(kind='inet')
+
+        # What follows is the acquisition of system-wide metrics.
         # https://serverfault.com/a/85481/121951
         system_mem = psutil.virtual_memory()
         loadavg = os.getloadavg()
@@ -752,17 +944,18 @@ def generate_samples(pid):
         # sampling interval).
         cputimes1 = procstats1['cpu_times']
         cputimes2 = procstats2['cpu_times']
-
         proc_io1 = procstats1['io_counters']
         proc_io2 = procstats2['io_counters']
+        num_ctx_switches1 = procstats1['num_ctx_switches']
+        num_ctx_switches2 = procstats2['num_ctx_switches']
 
         delta_t = t_rel2 - t_rel1
         _delta_cputimes_user = cputimes2.user - cputimes1.user
         _delta_cputimes_system = cputimes2.system - cputimes1.system
         _delta_cputimes_total = _delta_cputimes_user + _delta_cputimes_system
-        proc_util_percent_total = 100 * _delta_cputimes_total / delta_t
-        proc_util_percent_user = 100 * _delta_cputimes_user / delta_t
-        proc_util_percent_system = 100 * _delta_cputimes_system / delta_t
+        proc_cpu_util_percent_total = 100 * _delta_cputimes_total / delta_t
+        proc_cpu_util_percent_user = 100 * _delta_cputimes_user / delta_t
+        proc_cpu_util_percent_system = 100 * _delta_cputimes_system / delta_t
 
         proc_mem = procstats2['memory_info']
         proc_num_fds = procstats2['num_fds']
@@ -776,23 +969,34 @@ def generate_samples(pid):
         # with bytes per second are hard to interpret. However, in other
         # scenarios others might think that bps are better/more flexible. No
         # perfect solution.
-        proc_io_read_throughput_mibps = (proc_io2.read_chars - proc_io1.read_chars) / 1048576.0 / delta_t
-        proc_io_write_throughput_mibps = (proc_io2.write_chars - proc_io1.write_chars) / 1048576.0 / delta_t
-        proc_io_read_rate_hz = (proc_io2.read_count - proc_io1.read_count) / delta_t
-        proc_io_write_rate_hz = (proc_io2.write_count - proc_io1.write_count) / delta_t
+        proc_disk_read_throughput_mibps = (proc_io2.read_chars - proc_io1.read_chars) / 1048576.0 / delta_t
+        proc_disk_write_throughput_mibps = (proc_io2.write_chars - proc_io1.write_chars) / 1048576.0 / delta_t
+        proc_disk_read_rate_hz = (proc_io2.read_count - proc_io1.read_count) / delta_t
+        proc_disk_write_rate_hz = (proc_io2.write_count - proc_io1.write_count) / delta_t
+
+        proc_ctx_switch_rate_hz = \
+            (
+                (num_ctx_switches2.voluntary - num_ctx_switches1.voluntary) + \
+                (num_ctx_switches2.involuntary - num_ctx_switches1.involuntary)
+            ) / delta_t
 
         # Order matters, but only for the CSV output in the sample writer.
         sampledict = OrderedDict((
             ('unixtime', time_sample_timestamp),
             ('isotime_local', time_sample_isostring_local),
             ('proc_pid', pid),
-            ('proc_util_percent_total', proc_util_percent_total),
-            ('proc_util_percent_user', proc_util_percent_user),
-            ('proc_util_percent_system', proc_util_percent_system),
-            ('proc_io_read_throughput_mibps', proc_io_read_throughput_mibps),
-            ('proc_io_write_throughput_mibps', proc_io_write_throughput_mibps),
-            ('proc_io_read_rate_hz', proc_io_read_rate_hz),
-            ('proc_io_write_rate_hz', proc_io_write_rate_hz),
+            ('proc_cpu_util_percent_total', proc_cpu_util_percent_total),
+            ('proc_cpu_util_percent_user', proc_cpu_util_percent_user),
+            ('proc_cpu_util_percent_system', proc_cpu_util_percent_system),
+            ('proc_disk_read_throughput_mibps', proc_disk_read_throughput_mibps),
+            ('proc_disk_write_throughput_mibps', proc_disk_write_throughput_mibps),
+            ('proc_disk_read_rate_hz', proc_disk_read_rate_hz),
+            ('proc_disk_write_rate_hz', proc_disk_write_rate_hz),
+            ('proc_cpu_id', procstats2['cpu_num']),
+            ('proc_num_ip_sockets_open', len(ip_sockets)),
+            ('proc_num_threads', procstats2['num_threads']),
+            ('proc_ctx_switch_rate_hz', proc_ctx_switch_rate_hz),
+            ('proc_mem_rss_percent', procstats2['memory_percent']),
             ('proc_mem_rss', proc_mem.rss),
             ('proc_mem_vms', proc_mem.vms),
             ('proc_mem_dirty', proc_mem.dirty),
@@ -825,10 +1029,12 @@ def generate_samples(pid):
         diskstats1 = diskstats2
         t_rel1 = t_rel2
 
-        # provide the newly acquired sample to the consumer of this generator.
+        # Provide the newly acquired sample to the consumer of this generator.
         yield sampledict
 
-        # Wait (approximately) for the configured sampling interval.
+        # Wait approximately for the configured sampling interval. Deviations
+        # from the desired value do not contribute to the measurement error; the
+        # exact duration is measured by the sampling loop.
         time.sleep(SAMPLE_INTERVAL_SECONDS)
 
 
@@ -866,11 +1072,11 @@ def calc_diskstats(delta_t, s1, s2):
         # Also see https://www.kernel.org/doc/Documentation/iostats.txt
         #
         # Use psutil's `write_time` which is documented with "time spent writing
-        # to disk (in milliseconds)", extracted from field 8 in /proc/diskstats,
-        # see. And use psutil's `write_count` which is extracted from field 5 in
+        # to disk (in milliseconds)", extracted from field 8 in /proc/diskstats.
+        # Use psutil's `write_count` which is extracted from field 5 in
         # /proc/diststats. Notably, it is *not* the merged write count, but the
         # user space write count. Which seems to be what iostat uses for
-        # calculating w_await.
+        # calculating `w_await`.
         #
         # In an experiment I have seen that the following can happen within a
         # second of real time: (observed via `iostat -x 1 | grep xvdh` and via
@@ -888,7 +1094,7 @@ def calc_diskstats(delta_t, s1, s2):
         # interval: emitting a latency of '0' is misleading. It's common to
         # store a NaN/Null/None in that case, but that's not easily supported by
         # the HDF5 file format. Instead, store -1, with the convention that this
-        # value means precisely "no writes/reads happened here.
+        # value means precisely "no writes/reads happened here".
         delta_write_count = s2[dev].write_count - s1[dev].write_count
         if delta_write_count == 0:
             avg_write_latency_ms = -1
@@ -905,11 +1111,11 @@ def calc_diskstats(delta_t, s1, s2):
 
         # ## IO request rate, merged by kernel (what the device sees).
         #
-        # On Linux what matters more than the user space read or write request
-        # rate, is the _merged_ read or write request rate (the kernel attempts
-        # to merge individual user space requests before passing them to the
-        # hardware). For non-random I/O patterns this greatly reduces the of
-        # individual reads and writes issed to disk.
+        # On Linux what matters at least as much as user space read or write
+        # request rate, is the _merged_ read or write request rate (the kernel
+        # attempts to merge individual user space requests before passing them
+        # to the hardware). For non-random I/O patterns this greatly reduces the
+        # of individual reads and writes issed to disk.
         sampledict['disk_' + dev + '_merged_write_rate_hz'] = \
             (s2[dev].write_merged_count - s1[dev].write_merged_count) / delta_t
         sampledict['disk_' + dev + '_merged_read_rate_hz'] = \
@@ -931,6 +1137,7 @@ def get_hostname():
         log.info('Cannot get system hostname: %s', e)
         hostname = ''
     return hostname
+
 
 def pid_from_cmd(pid_command):
     """

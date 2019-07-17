@@ -39,6 +39,7 @@ logfmt = "%(asctime)s.%(msecs)03d %(name)s %(levelname)s: %(message)s"
 datefmt = "%y%m%d-%H:%M:%S"
 logging.basicConfig(format=logfmt, datefmt=datefmt, level=logging.DEBUG)
 log = logging.getLogger()
+logging.getLogger('matplotlib').setLevel('INFO')
 
 
 COLUMN_PLOT_CONFIGS = {
@@ -47,26 +48,25 @@ COLUMN_PLOT_CONFIGS = {
         'plot_title': 'foo',
         'rolling_wdw_width_seconds': 5,
     },
-    'proc_io_read_rate_hz': {
+    'proc_disk_read_rate_hz': {
         'y_label': 'Process read() rate [Hz]',
         'plot_title': 'foo',
         'rolling_wdw_width_seconds': 5,
         'yscale': 'symlog'
     },
-    'proc_io_write_rate_hz': {
+    'proc_disk_write_rate_hz': {
         'y_label': 'Process write() rate [Hz]',
         'plot_title': 'foo',
         'rolling_wdw_width_seconds': 5,
         'yscale': 'symlog'
     },
-    'proc_io_write_throughput_mibps': {
+    'proc_disk_write_throughput_mibps': {
         'y_label': 'Process write() tp [MiB/s]',
         'plot_title': 'foo',
         'rolling_wdw_width_seconds': 5,
         'yscale': 'symlog'
     },
     'system_loadavg1': {
-        'column_name': ,
         'y_label': 'System 1 min load avg',
         'plot_title': 'foo',
         'rolling_wdw_width_seconds': 0
@@ -84,7 +84,7 @@ COLUMN_PLOT_CONFIGS = {
 }
 
 
-# Global, populated by `parse_cmdline_args()`.
+# Populated by `parse_cmdline_args()`.
 ARGS = None
 
 
@@ -97,8 +97,11 @@ def main():
         inspect_data_file()
         sys.exit(0)
 
-    log.debug('Import packages')
+    # Importing matplotlib is slow. Defer until it known that it is needed.
+    log.debug('Import big packages')
     lazy_load_big_packages()
+
+    print(ARGS)
 
     if ARGS.command == 'magic':
         cmd_magic()
@@ -243,6 +246,7 @@ def inspect_data_file():
             f'  Invocation time (local): {table.attrs.invocation_time_local}\n'
             f'  PID command: {table.attrs.messer_pid_command}\n'
             f'  PID: {table.attrs.messer_pid}\n'
+            f'  Sampling interval: {table.attrs.messer_sampling_interval_seconds} s\n'
             #f'  Messer schema version: {table.attrs.messer_schema_version}\n'
         )
 
@@ -325,9 +329,9 @@ def plot_magic(dataframe, metadata):
 
     columns_to_plot = [
         'proc_util_percent_total',
-        'proc_io_read_rate_hz',
-        'proc_io_write_rate_hz',
-        'proc_io_write_throughput_mibps',
+        'proc_disk_read_rate_hz',
+        'proc_disk_write_rate_hz',
+        'proc_disk_write_throughput_mibps',
         'system_loadavg1',
     ]
 
@@ -337,7 +341,7 @@ def plot_magic(dataframe, metadata):
     ARGS.legend_loc = None
     ARGS.custom_y_limit = None
 
-    column_count = len(column_dicts)
+    column_count = len(columns_to_plot)
 
     # Create a new figure.
     plt.figure()
@@ -468,7 +472,7 @@ def plot_magic(dataframe, metadata):
 
     #plt.tight_layout()
 
-    savefig(column_dict['plot_title'])
+    savefig(f'messer_magicplot_{metadata.system_hostname}_{metadata.invocation_time_local}')
 
     # Return matplotlib figure object for further processing for interactive
     # mode.
