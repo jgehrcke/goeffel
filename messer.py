@@ -431,14 +431,9 @@ def process_outfile_args():
 
 def process_diskstats_args():
 
-    if not ARGS.diskstats:
-        return
+    def _add_dev_columns(devname):
 
-    known_devnames = list(psutil.disk_io_counters(perdisk=True).keys())
-    for devname in ARGS.diskstats:
-        if devname not in known_devnames:
-            sys.exit('Invalid disk device name: %s\nAvailable names: %s' % (
-                devname, ', '.join(known_devnames)))
+        devname = _disk_dev_name_to_metric_name(devname)
 
         # Dynamically add columns to the HDF5 table schema.
         column_names = [
@@ -453,9 +448,38 @@ def process_diskstats_args():
 
         # Note(JP): Windows support might be easy to add by conditionally
         # accounting for certain disk metrics.
-
         for n in column_names:
             HDF5_SCHEMA.add_column(colname=n, coltype=tables.Float32Col)
+
+    if not ARGS.diskstats:
+        return
+
+    all_known_devnames = list(psutil.disk_io_counters(perdisk=True).keys())
+
+    # Add special notion of 'all' device.
+    valid_options = all_known_devnames + ['all']
+
+    # Validate the provided arguments.
+    for devname in ARGS.diskstats:
+        if devname not in valid_options:
+            sys.exit('Invalid disk device name: %s\nAvailable names: %s' % (
+                devname, ', '.join(valid_options)))
+
+    # Handle special case first.
+    if 'all' in ARGS.diskstats:
+        # Re-populate ARGS.diskstats with all devices.
+        ARGS.diskstats = all_known_devnames
+
+    for devname in ARGS.diskstats:
+        _add_dev_columns(devname)
+
+
+def _disk_dev_name_to_metric_name(devname):
+    # Replace dashes with underscores so that the metric name complies
+    # with pytables restrictions.. otherwise:
+    #  ... it does not match the pattern ``^[a-zA-Z_][a-zA-Z0-9_]*$``
+    devname = devname.replace('-', '_')
+    return devname
 
 
 def _prepare_hdf5_file_if_not_yet_existing():
@@ -1071,6 +1095,10 @@ def calc_diskstats(delta_t, s1, s2):
 
     for dev in ARGS.diskstats:
 
+        # `dev` is the actual device name
+        # `mdev` is the name of the device in the HDF5 metric name.
+        mdev = _disk_dev_name_to_metric_name(dev)
+
         # Attempt to implements iostat's `%util` metric which is documented with
         # "Percentage of elapsed time during which I/O requests were issued  to
         # the  device  (bandwidth  utilization  for the device)."
@@ -1079,7 +1107,7 @@ def calc_diskstats(delta_t, s1, s2):
         # the ratio between the actual time elapsed and `busy_time`, express it
         # in percent. Percent calc yields factor 100, millisecond conversion
         # yields factor 1000, leaving behind an overall factor 10.
-        sampledict['disk_' + dev + '_util_percent'] = \
+        sampledict['disk_' + mdev + '_util_percent'] = \
             (s2[dev].busy_time - s1[dev].busy_time) / (delta_t * 10)
 
         # Implement iostat's `w_await` which is documented with "The average
@@ -1118,14 +1146,14 @@ def calc_diskstats(delta_t, s1, s2):
             avg_write_latency_ms = -1
         else:
             avg_write_latency_ms = (s2[dev].write_time - s1[dev].write_time) / delta_write_count
-        sampledict['disk_' + dev + '_write_latency_ms'] = avg_write_latency_ms
+        sampledict['disk_' + mdev + '_write_latency_ms'] = avg_write_latency_ms
 
         delta_read_count = s2[dev].read_count - s1[dev].read_count
         if delta_read_count == 0:
             avg_read_latency_ms = -1
         else:
             avg_read_latency_ms = (s2[dev].read_time - s1[dev].read_time) / delta_read_count
-        sampledict['disk_' + dev + '_read_latency_ms'] = avg_read_latency_ms
+        sampledict['disk_' + mdev + '_read_latency_ms'] = avg_read_latency_ms
 
         # ## IO request rate, merged by kernel (what the device sees).
         #
@@ -1134,15 +1162,15 @@ def calc_diskstats(delta_t, s1, s2):
         # attempts to merge individual user space requests before passing them
         # to the hardware). For non-random I/O patterns this greatly reduces the
         # of individual reads and writes issed to disk.
-        sampledict['disk_' + dev + '_merged_write_rate_hz'] = \
+        sampledict['disk_' + mdev + '_merged_write_rate_hz'] = \
             (s2[dev].write_merged_count - s1[dev].write_merged_count) / delta_t
-        sampledict['disk_' + dev + '_merged_read_rate_hz'] = \
+        sampledict['disk_' + mdev + '_merged_read_rate_hz'] = \
             (s2[dev].read_merged_count - s1[dev].read_merged_count) / delta_t
 
         # ## IO request rate emitted by user space.
-        sampledict['disk_' + dev + '_userspace_write_rate_hz'] = \
+        sampledict['disk_' + mdev + '_userspace_write_rate_hz'] = \
             delta_write_count / delta_t
-        sampledict['disk_' + dev + '_userspace_read_rate_hz'] = \
+        sampledict['disk_' + mdev + '_userspace_read_rate_hz'] = \
             delta_read_count / delta_t
 
     return sampledict
