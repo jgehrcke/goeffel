@@ -151,6 +151,12 @@ HDF5_FILE_ROTATION_SIZE_MB = 50
 # size (in MiB).
 HDF5_SERIES_SIZE_MAX_MB = 1000
 
+# Accumulate so many samples before appending them all at once to the HDF5 file.
+# Updating the HDF5 file is a costly operation and we only want to do that a
+# couple of times per minute (trade-off along these dimensions: file management
+# overhead, risk of corruption, risk of losing progress).
+HDF5_SAMPLE_WRITE_BATCH_SIZE = 20
+
 CSV_COLUMN_HEADER_WRITTEN = False
 OUTFILE_PATH_HDF5 = None
 OUTFILE_PATH_CSV = None
@@ -570,7 +576,7 @@ def sample_writer_process(queue):
             _write_samples_hdf5_if_enabled([sample])
             first_sample_written = True
 
-        elif len(hdf5_sample_buffer) == 20:
+        elif len(hdf5_sample_buffer) == HDF5_SAMPLE_WRITE_BATCH_SIZE:
             _write_samples_hdf5_if_enabled(hdf5_sample_buffer)
             hdf5_sample_buffer = []
 
