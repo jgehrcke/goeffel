@@ -686,6 +686,7 @@ def _hdf5_remove_oldest_file_if_required():
         # problem and removal succeeds upon next attempt. It's not worth
         # crashing the data acquisition.
         os.remove(filepaths_sorted[0])
+        return True
     except Exception as e:
         log.warning('File removal failed: %s', str(e))
 
@@ -693,9 +694,11 @@ def _hdf5_remove_oldest_file_if_required():
 def _write_samples_hdf5_if_enabled(samples):
     """
     For writing every sample go through the complete life cycle from open()ing
-    the HDF5 file to close()ing it, to minimize the risk for data corruption. If
-    doing this once per SAMPLE_INTERVAL_SECONDS generates too much overhead a
-    proper solution is to write more than one sample (row) in one go.
+    the HDF5 file to close()ing it, to minimize the risk for data corruption. As
+    of the complexity of the HDF5 file format this results in quite a number of
+    file accesses. If doing this once per SAMPLE_INTERVAL_SECONDS generates too
+    much overhead a proper solution is to write more than one sample (row) in
+    one go.
     """
     if OUTFILE_PATH_HDF5 is None:
         # That is the signal to not write an HDF5 output file.
@@ -779,7 +782,9 @@ def mainloop(samplequeue, samplewriter):
         try:
             sample_process(ARGS.pid, samplequeue, samplewriter)
         except psutil.Error as exc:
-            log.error('Cannot inspect process: %s', exc.msg)
+            # It's an expected condition when the process goes away, so not an
+            # error.
+            log.info('Cannot inspect process: %s', exc.msg)
             sys.exit(1)
 
     # Handle the case where a PID command was provided on the command line. That
@@ -797,7 +802,7 @@ def mainloop(samplequeue, samplewriter):
         try:
             sample_process(pid, samplequeue, samplewriter)
         except psutil.Error as exc:
-            log.error('Cannot inspect process: %s', exc.msg)
+            log.info('Cannot inspect process: %s', exc.msg)
 
 
 def sample_process(pid, samplequeue, samplewriter):

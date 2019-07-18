@@ -129,8 +129,8 @@ If the inspected process is known to contain just a single thread then
 this can still sometimes be larger than 100 % as of measurement errors. If the
 process contains more than one thread then this can go far beyond 100 %.
 
-This is the sum of the time spent in user space and in kernel space. For a
-more fine-grained picture the following two metrics are also available
+This is based on the sum of the time spent in user space and in kernel space.
+For a more fine-grained picture the following two metrics are also available:
 `proc_cpu_util_percent_user`, and `proc_cpu_util_percent_system`.
 
 
@@ -144,8 +144,8 @@ Momentary state at sampling time.
 #### `proc_num_ip_sockets_open`
 
 The number of sockets currently being open. This includes IPv4 and IPv6 and does
-not distinguish between TCP and UDP (in case of TCP the connection state also
-does not matter).
+not distinguish between TCP and UDP, and the connection state also does not
+matter.
 
 Momentary state at sampling time.
 
@@ -161,13 +161,14 @@ Momentary state at sampling time.
 
 The disk I/O throughput of the inspected process, in `MiB/s`.
 
-Based on Linux' `/proc/<pid>/io` `rchar` and `wchar`
+Based on Linux' `/proc/<pid>/io` `rchar` and `wchar`. A highly relevant
+[piece of documentation](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/Documentation/filesystems/proc.txt) (emphasis mine):
 
 > The number of bytes which this task has caused to be read from storage. This
 > is simply the sum of bytes which this process passed to read() and pread().
-> It includes things like tty IO and it is unaffected by whether or not actual
-> physical disk IO was required (the read might have been satisfied from
-> pagecache)
+> *It includes things like tty IO* and it is unaffected by whether or not actual
+> physical disk IO was required (*the read might have been satisfied from
+> pagecache*)
 
 Mean over the past sampling interval.
 
