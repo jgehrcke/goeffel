@@ -142,6 +142,15 @@ MESSER_SAMPLE_SCHEMA_VERSION = 1
 # (reducing risk for corruption) matters more than throughput.
 HDF5_COMP_FILTER = tables.Filters(complevel=9, complib='zlib', fletcher32=True)
 
+# File rotation: rotate to the next HDF5 file if the current file in the series
+# surpasses this size (in MiB).
+HDF5_FILE_ROTATION_SIZE_MB = 50
+
+# File retention policy: delete the earliest HDF5 file(s) in the current series
+# of files if the total size of all files in the current series surpasses this
+# size (in MiB).
+HDF5_SERIES_SIZE_MAX_MB = 1000
+
 CSV_COLUMN_HEADER_WRITTEN = False
 OUTFILE_PATH_HDF5 = None
 OUTFILE_PATH_CSV = None
@@ -576,15 +585,14 @@ def _hdf5_file_rotate_if_required():
     if not os.path.exists(OUTFILE_PATH_HDF5):
         return
 
-    maxmb = 0.013
     cursize = os.path.getsize(OUTFILE_PATH_HDF5)
-    maxsize = 1024 * 1024 * maxmb
+    maxsize = 1024 * 1024 * HDF5_FILE_ROTATION_SIZE_MB
 
     if cursize < maxsize:
         log.debug('Do not rotate HDF5 file: %s B < %s B', cursize, maxsize)
         return
 
-    log.info('HDF5 file is larger than %s MB, rotate', maxmb)
+    log.info('HDF5 file is larger than %s MB, rotate', HDF5_FILE_ROTATION_SIZE_MB)
 
     # The current `HDF5_FILE_SERIES_INDEX` is the source of truth. The output
     # file currently being written to does not contain this index in its file
@@ -639,9 +647,8 @@ def _hdf5_remove_oldest_file_if_required():
         accumulated_size_bytes,
         ', '.join(filenames)
     )
-    max_series_size_mb = 0.03
-    maxsize = 1024 * 1024 * max_series_size_mb
 
+    maxsize = 1024 * 1024 * HDF5_SERIES_SIZE_MAX_MB
     if accumulated_size_bytes < maxsize:
         log.info(
             'Do not delete the oldest file in series: %s Bytes < %s Bytes',
