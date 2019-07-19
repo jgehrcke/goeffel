@@ -43,7 +43,7 @@ logging.getLogger('matplotlib').setLevel('INFO')
 
 
 COLUMN_PLOT_CONFIGS = {
-    'proc_util_percent_total': {
+    'proc_cpu_util_percent_total': {
         'y_label': 'Process CPU util (total) [%]',
         'plot_title': 'foo',
         'rolling_wdw_width_seconds': 5,
@@ -328,7 +328,7 @@ def plot_magic(dataframe, metadata):
     """
 
     columns_to_plot = [
-        'proc_util_percent_total',
+        'proc_cpu_util_percent_total',
         'proc_disk_read_rate_hz',
         'proc_disk_write_rate_hz',
         'proc_disk_write_throughput_mibps',
