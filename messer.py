@@ -143,18 +143,20 @@ MESSER_SAMPLE_SCHEMA_VERSION = 1
 HDF5_COMP_FILTER = tables.Filters(complevel=9, complib='zlib', fletcher32=True)
 
 # File rotation: rotate to the next HDF5 file if the current file in the series
-# surpasses this size (in MiB).
-HDF5_FILE_ROTATION_SIZE_MB = 50
+# surpasses this size (in MiB). As of the time of writing Messer accumulates
+# roughly(!) 10 MiB per day in an HDF5 file (with gzip compression).
+HDF5_FILE_ROTATION_SIZE_MB = 20
 
 # File retention policy: delete the earliest HDF5 file(s) in the current series
 # of files if the total size of all files in the current series surpasses this
 # size (in MiB).
-HDF5_SERIES_SIZE_MAX_MB = 1000
+HDF5_SERIES_SIZE_MAX_MB = 500
 
-# Accumulate so many samples before appending them all at once to the HDF5 file.
-# Updating the HDF5 file is a costly operation and we only want to do that a
-# couple of times per minute (trade-off along these dimensions: file management
-# overhead, risk of corruption, risk of losing progress).
+# Accumulate so many samples in the sample consumer process before appending
+# them all at once to the current HDF5 file. Updating the HDF5 file is a costly
+# operation and the goal is to only do that a couple of times per minute
+# (trade-off along these dimensions: file management overhead, risk of
+# corruption, risk of losing progress).
 HDF5_SAMPLE_WRITE_BATCH_SIZE = 20
 
 CSV_COLUMN_HEADER_WRITTEN = False
@@ -164,8 +166,8 @@ OUTFILE_PATH_CSV = None
 # Will be populated by ArgumentParser, with options from the command line.
 ARGS = None
 
-# Measure invocation time (is consumed in various places, e.g. written to
-# the HDF5 metadata).
+# Record invocation time (is consumed in various places, e.g. written to the
+# HDF5 metadata).
 INVOCATION_TIME_UNIX_TIMESTAMP = time.time()
 INVOCATION_TIME_LOCAL_STRING = datetime.fromtimestamp(
     INVOCATION_TIME_UNIX_TIMESTAMP).strftime(format='%Y%m%d_%H%M%S')
