@@ -122,14 +122,6 @@ from datetime import datetime
 import tables
 
 
-# The sample interval should ideallynot be smaller than 0.5 seconds so that
-# kernel counter update errors and other timing errors do not dominate the data
-# emitted by this program. Relevant reference:
-# https://elinux.org/Kernel_Timer_Systems From the `cpustat` documentation:
-# "Linux CPU time accounting is done in terms of whole "clock ticks", which are
-# often 100ms. This can cause some strange values when sampling every 200ms.""
-SAMPLE_INTERVAL_SECONDS = 0.5
-
 # If the program is invoked with a PID command and the process goes away then
 # the PID command is invoked periodically for polling for a new PID. This
 # constant determines the polling interval.
@@ -261,7 +253,6 @@ def main():
     )
 
     what = parser.add_mutually_exclusive_group(required=True)
-
     what.add_argument(
         '--pid-command',
         metavar='\'PID COMMAND\'',
@@ -273,9 +264,6 @@ def main():
         type=int,
         help='A process ID.'
     )
-
-    # Collect ideas for more flexible configuration.
-    # what.add_argument('--diskstats', action='store_true')
 
     parser.add_argument(
         '--diskstats',
@@ -332,6 +320,14 @@ def main():
         help='Do not record system-global metrics (for a small reduction of the output data rate).'
     )
 
+    parser.add_argument(
+        '--sampling-interval',
+        metavar='SECONDS',
+        type=float,
+        default=0.5,
+        help='Data sampling interval (default: 0.5 s).'
+    )
+
     global ARGS
     ARGS = parser.parse_args()
 
@@ -361,6 +357,20 @@ def main():
                 'system_mem_active',
                 'system_mem_inactive'):
             HDF5_SCHEMA.add_column(colname=cn, coltype=tables.UInt64Col)
+
+    # The sample interval should ideally not be smaller than 0.5 seconds so that
+    # kernel counter update errors and other timing errors do not dominate the
+    # data emitted by this program. Relevant reference:
+    # https://elinux.org/Kernel_Timer_Systems
+    # From the `cpustat` documentation:
+    # "Linux CPU time accounting is done in terms of whole "clock ticks", which
+    # are often 100ms. This can cause some strange values when sampling every
+    # 200ms."
+    if ARGS.sampling_interval < 0.3:
+        sys.exit(
+            'The sampling interval is probably too small, and I cannot '
+            'guarantee meaningful data collection. Exit.'
+        )
 
     # Set up the infrastructure for decoupling measurement (sample collection)
     # from persisting the data.
@@ -520,7 +530,7 @@ def _prepare_hdf5_file_if_not_yet_existing():
     # Store both, pid and pid command although we know only one is populated.
     hdf5table.attrs.messer_pid_command = ARGS.pid_command
     hdf5table.attrs.messer_pid = ARGS.pid
-    hdf5table.attrs.messer_sampling_interval_seconds = SAMPLE_INTERVAL_SECONDS
+    hdf5table.attrs.messer_sampling_interval_seconds = ARGS.sampling_interval
     hdf5table.attrs.messer_file_series_index = HDF5_FILE_SERIES_INDEX
     hdf5file.close()
 
@@ -735,9 +745,9 @@ def _write_samples_hdf5_if_enabled(samples):
     For writing every sample go through the complete life cycle from open()ing
     the HDF5 file to close()ing it, to minimize the risk for data corruption. As
     of the complexity of the HDF5 file format this results in quite a number of
-    file accesses. If doing this once per SAMPLE_INTERVAL_SECONDS generates too
-    much overhead a proper solution is to write more than one sample (row) in
-    one go.
+    file accesses. If doing this once per ARGS.sampling_interval (seconds)
+    generates too much overhead a proper solution is to write more than one
+    sample (row) in one go.
     """
     if OUTFILE_PATH_HDF5 is None:
         # That is the signal to not write an HDF5 output file.
@@ -912,7 +922,7 @@ def generate_samples(pid):
     if ARGS.diskstats:
         diskstats1 = psutil.disk_io_counters(perdisk=True)
 
-    time.sleep(SAMPLE_INTERVAL_SECONDS)
+    time.sleep(ARGS.sampling_interval)
 
     while True:
 
@@ -1079,7 +1089,7 @@ def generate_samples(pid):
         # Wait approximately for the configured sampling interval. Deviations
         # from the desired value do not contribute to the measurement error; the
         # exact duration is measured by the sampling loop.
-        time.sleep(SAMPLE_INTERVAL_SECONDS)
+        time.sleep(ARGS.sampling_interval)
 
 
 def calc_diskstats(delta_t, s1, s2):

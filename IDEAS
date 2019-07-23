@@ -44,11 +44,6 @@
 - Note that this program must be run as root (in docs) and also generate nice
   error messages around that.
 
-- Make sampling interval configurable (also implement a meaningful minimum; i.e.
-  maximum rate).
-
 - Document the fact that -1 has a special meaning for some metrics.
 
 - Replace HDF5 type for columns with unit 'percent' to be Float16 instead of Float32?
-
-- Collect some TCP / network metrics by default?
