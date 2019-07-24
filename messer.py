@@ -179,10 +179,7 @@ def main():
     process_cmdline_args()
 
     sampleq = multiprocessing.Queue()
-    consumer_process = multiprocessing.Process(
-        target=sample_consumer_process,
-        args=(sampleq,)
-    )
+    consumer_process = SampleConsumerProcess(sampleq)
     consumer_process.start()
 
     try:
@@ -575,327 +572,329 @@ def _disk_dev_name_to_metric_name(devname):
     return devname
 
 
-def _prepare_hdf5_file_if_not_yet_existing():
+class SampleConsumerProcess(multiprocessing.Process):
 
-    if os.path.exists(OUTFILE_PATH_HDF5):
-        return
+    def __init__(self, queue):
+        super().__init__()
+        self._queue = queue
 
-    # Do not use HDF5 groups. Write a single table per file, with a
-    # well-known table name so that the analysis program can discover.
-    # Note(JP): investicate chunk size, and generally explore providing an
-    # expected row count. For example, with a 1 Hz sampling rate aboout 2.5
-    # million rows are collected within 30 days:
-    # >>> 24 * 60 * 60 * 30
-    # 2592000
+    def run(self):
+        """
+        This method is being run in a child process.
 
-    log.info('Create HDF5 file: %s', OUTFILE_PATH_HDF5)
+        The parent process runs the measurement loop (sample producer). The
+        child process' main responsibility is to output the data to disk (sample
+        consumer).
 
-    hdf5file = tables.open_file(
-        OUTFILE_PATH_HDF5,
-        mode='w',
-        title='messer.py time series file, invocation at ' + INVOCATION_TIME_LOCAL_STRING,
-        filters=HDF5_COMP_FILTER
-    )
-    hdf5table = hdf5file.create_table(
-        where='/',
-        name='messer_timeseries',
-        description=HDF5_SCHEMA.schema_dict,
-        title='messer.py time series, invocation at ' + INVOCATION_TIME_LOCAL_STRING,
-    )
+        The parent and the child are connected through a classical pipe for
+        inter-process communication, on top of which an atomic message queue is
+        used for passing messages from the parent process to the child process.
 
-    # Use so-called HDF5 table user attributes for storing relevant metadata.
-    hdf5table.attrs.invocation_time_unix = INVOCATION_TIME_UNIX_TIMESTAMP
-    hdf5table.attrs.invocation_time_local = INVOCATION_TIME_LOCAL_STRING
-    hdf5table.attrs.system_hostname = get_hostname()
-    hdf5table.attrs.messer_schema_version = MESSER_SAMPLE_SCHEMA_VERSION
-    # Store both, pid and pid command although we know only one is populated.
-    hdf5table.attrs.messer_pid_command = ARGS.pid_command
-    hdf5table.attrs.messer_pid = ARGS.pid
-    hdf5table.attrs.messer_sampling_interval_seconds = ARGS.sampling_interval
-    hdf5table.attrs.messer_file_series_index = HDF5_FILE_SERIES_INDEX
-    hdf5file.close()
+        Each message is either a sample object (a tuple of values for a given
+        timestamp), or `None` to signal the child process that it is supposed to
+        properly shut down and exit.
 
+        Ignore SIGINT in the child process (default handler in CPython is to
+        raise KeyboardInterrupt, which is undesired here). The parent handles
+        SIGINT, and instructs the child to clean up as part of handling it.
 
-def _prepare_csv_file_if_not_yet_existing():
+        This architecture decouples the measurement loop from persisting the
+        data. The size of the Queue-based buffer (in the parent process)
+        determines how strongly the two processes are (de)coupled.
 
-    if os.path.exists(OUTFILE_PATH_CSV):
-        return
+        As of this architecture the I/O operations performed here (in the child
+        process, responsible for persisting the data) are unlikely to negatively
+        affect the main measurement loop in the parent process. This matters
+        especially upon disk write latency hiccups (in cloud environments we
+        regularly see fsync latencies of multiple seconds).
+        """
 
-    log.info('Create CSV file: %s', OUTFILE_PATH_CSV)
-    with open(OUTFILE_PATH_CSV, 'wb') as f:
-        f.write(b'# messer_timeseries\n')
-        f.write(b'# %s\n' (INVOCATION_TIME_LOCAL_STRING, ))
-        f.write(b'# system hostname: %s\n' (get_hostname(), ))
-        f.write(b'# schema version: %s\n' (MESSER_SAMPLE_SCHEMA_VERSION, ))
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
 
+        hdf5_sample_buffer = []
 
-def sample_consumer_process(queue):
-    """
-    This function is being run in a child process.
+        first_sample_written = False
 
-    The parent process runs the measurement loop (sample producer). The child
-    process' main responsibility is to output the data to disk (sample
-    consumer).
+        while True:
 
-    The parent and the child are connected through a classical pipe for
-    inter-process communication, on top of which an atomic message queue is used
-    for passing messages from the parent process to the child process.
+            # Attempt to get next sample from the parent process through the
+            # atomic message queue. This is a blocking call.
+            sample = self._queue.get()
+            t_after_get = time.monotonic()
 
-    Each message is either a sample object (a tuple of values for a given
-    timestamp), or `None` to signal the child process that it is supposed to
-    properly shut down and exit.
+            # `sample` is expected to be an n-tuple or None. Shut down worker
+            # process in case of `None`.
+            if sample is None:
+                log.debug('Sample consumer process: shutting down')
+                break
 
-    Ignore SIGINT in the child process (default handler in CPython is to raise
-    KeyboardInterrupt, which is undesired here). The parent handles SIGINT, and
-    instructs the child to clean up as part of handling it.
+            # Simulate I/O slowness.
+            # import random
+            # time.sleep(random.randint(1, 10) / 30.0)
 
-    This architecture decouples the measurement loop from persisting the data.
-    The size of the Queue-based buffer (in the parent process) determines how
-    strongly the two processes are (de)coupled.
+            self._write_sample_csv_if_enabled(sample)
 
-    As of this architecture the I/O operations performed here (in the child
-    process, responsible for persisting the data) are unlikely to negatively
-    affect the main measurement loop in the parent process. This matters
-    especially upon disk write latency hiccups (in cloud environments we
-    regularly see fsync latencies of multiple seconds).
-    """
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
+            # Write N samples to disk together (it iss fine to potentially lose
+            # a couple of seconds of time series data). Also write very first
+            # sample immediately so that writing the HDF5 file fails fast (if it
+            # fails, instead of failing only after collecting the first N
+            # samples).
 
-    hdf5_sample_buffer = []
+            if not first_sample_written:
+                self._write_samples_hdf5_if_enabled([sample])
+                first_sample_written = True
 
-    first_sample_written = False
+            elif len(hdf5_sample_buffer) == HDF5_SAMPLE_WRITE_BATCH_SIZE:
+                self._write_samples_hdf5_if_enabled(hdf5_sample_buffer)
+                hdf5_sample_buffer = []
 
-    while True:
+            else:
+                hdf5_sample_buffer.append(sample)
 
-        # Attempt to get next sample from the parent process through the atomic
-        # message queue. This is a blocking call.
-        sample = queue.get()
-        t_after_get = time.monotonic()
+            log.debug('Consumer iteration: %.6f s', time.monotonic() - t_after_get)
 
-        # `sample` is expected to be an n-tuple or None. Shut down worker
-        # process in case of `None`.
-        if sample is None:
-            log.debug('Sample consumer process: shutting down')
-            break
+    def _prepare_hdf5_file_if_not_yet_existing(self):
 
-        # Simulate I/O slowness.
-        # import random
-        # time.sleep(random.randint(1, 10) / 30.0)
+        if os.path.exists(OUTFILE_PATH_HDF5):
+            return
 
-        _write_sample_csv_if_enabled(sample)
+        # Do not use HDF5 groups. Write a single table per file, with a
+        # well-known table name so that the analysis program can discover.
+        # Note(JP): investicate chunk size, and generally explore providing an
+        # expected row count. For example, with a 1 Hz sampling rate aboout 2.5
+        # million rows are collected within 30 days:
+        # >>> 24 * 60 * 60 * 30
+        # 2592000
 
-        # Write N samples to disk together (it iss fine to potentially lose a
-        # couple of seconds of time series data). Also write very first sample
-        # immediately so that writing the HDF5 file fails fast (if it fails,
-        # instead of failing only after collecting the first N samples).
+        log.info('Create HDF5 file: %s', OUTFILE_PATH_HDF5)
 
-        if not first_sample_written:
-            _write_samples_hdf5_if_enabled([sample])
-            first_sample_written = True
+        hdf5file = tables.open_file(
+            OUTFILE_PATH_HDF5,
+            mode='w',
+            title='messer.py time series file, invocation at ' + INVOCATION_TIME_LOCAL_STRING,
+            filters=HDF5_COMP_FILTER
+        )
+        hdf5table = hdf5file.create_table(
+            where='/',
+            name='messer_timeseries',
+            description=HDF5_SCHEMA.schema_dict,
+            title='messer.py time series, invocation at ' + INVOCATION_TIME_LOCAL_STRING,
+        )
 
-        elif len(hdf5_sample_buffer) == HDF5_SAMPLE_WRITE_BATCH_SIZE:
-            _write_samples_hdf5_if_enabled(hdf5_sample_buffer)
-            hdf5_sample_buffer = []
+        # Use so-called HDF5 table user attributes for storing relevant metadata.
+        hdf5table.attrs.invocation_time_unix = INVOCATION_TIME_UNIX_TIMESTAMP
+        hdf5table.attrs.invocation_time_local = INVOCATION_TIME_LOCAL_STRING
+        hdf5table.attrs.system_hostname = get_hostname()
+        hdf5table.attrs.messer_schema_version = MESSER_SAMPLE_SCHEMA_VERSION
+        # Store both, pid and pid command although we know only one is populated.
+        hdf5table.attrs.messer_pid_command = ARGS.pid_command
+        hdf5table.attrs.messer_pid = ARGS.pid
+        hdf5table.attrs.messer_sampling_interval_seconds = ARGS.sampling_interval
+        hdf5table.attrs.messer_file_series_index = HDF5_FILE_SERIES_INDEX
+        hdf5file.close()
 
-        else:
-            hdf5_sample_buffer.append(sample)
+    def _prepare_csv_file_if_not_yet_existing(self):
 
-        log.debug('Consumer iteration: %.6f s', time.monotonic() - t_after_get)
+        if os.path.exists(OUTFILE_PATH_CSV):
+            return
 
+        log.info('Create CSV file: %s', OUTFILE_PATH_CSV)
+        with open(OUTFILE_PATH_CSV, 'wb') as f:
+            f.write(b'# messer_timeseries\n')
+            f.write(b'# %s\n' (INVOCATION_TIME_LOCAL_STRING, ))
+            f.write(b'# system hostname: %s\n' (get_hostname(), ))
+            f.write(b'# schema version: %s\n' (MESSER_SAMPLE_SCHEMA_VERSION, ))
 
-def _hdf5_file_rotate_if_required():
-    # During the first iteration the file does not yet exist.
-    if not os.path.exists(OUTFILE_PATH_HDF5):
-        return
+    def _hdf5_file_rotate_if_required(self):
+        # During the first iteration the file does not yet exist.
+        if not os.path.exists(OUTFILE_PATH_HDF5):
+            return
 
-    cursize = os.path.getsize(OUTFILE_PATH_HDF5)
-    maxsize = 1024 * 1024 * HDF5_FILE_ROTATION_SIZE_MB
+        cursize = os.path.getsize(OUTFILE_PATH_HDF5)
+        maxsize = 1024 * 1024 * HDF5_FILE_ROTATION_SIZE_MB
 
-    if cursize < maxsize:
-        log.debug('Do not rotate HDF5 file: %s B < %s B', cursize, maxsize)
-        return
+        if cursize < maxsize:
+            log.debug('Do not rotate HDF5 file: %s B < %s B', cursize, maxsize)
+            return
 
-    log.info('HDF5 file is larger than %s MB, rotate', HDF5_FILE_ROTATION_SIZE_MB)
+        log.info('HDF5 file is larger than %s MB, rotate', HDF5_FILE_ROTATION_SIZE_MB)
 
-    # The current `HDF5_FILE_SERIES_INDEX` is the source of truth. The output
-    # file currently being written to does not contain this index in its file
-    # name (it's in the HDF5 meta data however). Now move that file so that
-    # the path contains this index, then increment the index by 1.
-    global HDF5_FILE_SERIES_INDEX
+        # The current `HDF5_FILE_SERIES_INDEX` is the source of truth. The output
+        # file currently being written to does not contain this index in its file
+        # name (it's in the HDF5 meta data however). Now move that file so that
+        # the path contains this index, then increment the index by 1.
+        global HDF5_FILE_SERIES_INDEX
 
-    # Note(JP): automated file deletion further below relies on the index being
-    # *appended* with *4* dights, and it relies on a larger index meaning "more
-    # recent" data.
-    new_path = OUTFILE_PATH_HDF5 + '.' + str(HDF5_FILE_SERIES_INDEX).zfill(4)
+        # Note(JP): automated file deletion further below relies on the index being
+        # *appended* with *4* dights, and it relies on a larger index meaning "more
+        # recent" data.
+        new_path = OUTFILE_PATH_HDF5 + '.' + str(HDF5_FILE_SERIES_INDEX).zfill(4)
 
-    if os.path.exists(new_path):
-        log.error('File unexpectedly exists already: %s', new_path)
-        log.error('Erroring out instead of overwriting')
-        sys.exit(1)
+        if os.path.exists(new_path):
+            log.error('File unexpectedly exists already: %s', new_path)
+            log.error('Erroring out instead of overwriting')
+            sys.exit(1)
 
-    log.info('Move current HDF5 file to %s', new_path)
+        log.info('Move current HDF5 file to %s', new_path)
 
-    # If this fails the program crashes which is as of now desired behavior.
-    os.rename(OUTFILE_PATH_HDF5, new_path)
+        # If this fails the program crashes which is as of now desired behavior.
+        os.rename(OUTFILE_PATH_HDF5, new_path)
 
-    # The next HDF5 file created by `_prepare_hdf5_file_if_not_yet_existing()`
-    # will contain the incremented value in its meta data.
-    HDF5_FILE_SERIES_INDEX += 1
+        # The next HDF5 file created by `_prepare_hdf5_file_if_not_yet_existing()`
+        # will contain the incremented value in its meta data.
+        HDF5_FILE_SERIES_INDEX += 1
 
-    log.info('Check if oldest file in series should be deleted')
-    while _hdf5_remove_oldest_file_if_required():
-        # Do this in a loop because otherwise the program can remove at most one
-        # file per file rotation cycle. While this is enough in almost all of
-        # the cases, it is not enough if one file deletion attempt fails as of
-        # a transient problem.
-        log.info('Deleted a file, check again')
+        log.info('Check if oldest file in series should be deleted')
+        while self._hdf5_remove_oldest_file_if_required():
+            # Do this in a loop because otherwise the program can remove at most one
+            # file per file rotation cycle. While this is enough in almost all of
+            # the cases, it is not enough if one file deletion attempt fails as of
+            # a transient problem.
+            log.info('Deleted a file, check again')
 
+    def _hdf5_remove_oldest_file_if_required(self):
+        """Return `True` if a file was deleted (invoke again in this case).
 
-def _hdf5_remove_oldest_file_if_required():
-    """Return `True` if a file was deleted (invoke again in this case).
-
-    Return `None` if no file needed to be deleted.
-    """
-    # If the collection of HDF5 files belonging to this series surpasses a size
-    # threshold then start deleting the oldest files (lowest index).
-    hdf5_files_dir_path = os.path.dirname(os.path.abspath(OUTFILE_PATH_HDF5))
-    hdf5_outfile_basename = os.path.basename(OUTFILE_PATH_HDF5)
-    filenames = [fn for fn in os.listdir(hdf5_files_dir_path) if \
-        fn.startswith(hdf5_outfile_basename)
-    ]
-    filepaths = [os.path.join(hdf5_files_dir_path, fn) for fn in filenames]
-    accumulated_size_bytes = sum(os.path.getsize(p) for p in filepaths)
-    log.info(
-        'Accumulated size of files in series: %s Bytes (files: %s)',
-        accumulated_size_bytes,
-        ', '.join(filenames)
-    )
-
-    maxsize = 1024 * 1024 * HDF5_SERIES_SIZE_MAX_MB
-    if accumulated_size_bytes < maxsize:
+        Return `None` if no file needed to be deleted.
+        """
+        # If the collection of HDF5 files belonging to this series surpasses a size
+        # threshold then start deleting the oldest files (lowest index).
+        hdf5_files_dir_path = os.path.dirname(os.path.abspath(OUTFILE_PATH_HDF5))
+        hdf5_outfile_basename = os.path.basename(OUTFILE_PATH_HDF5)
+        filenames = [fn for fn in os.listdir(hdf5_files_dir_path) if \
+            fn.startswith(hdf5_outfile_basename)
+        ]
+        filepaths = [os.path.join(hdf5_files_dir_path, fn) for fn in filenames]
+        accumulated_size_bytes = sum(os.path.getsize(p) for p in filepaths)
         log.info(
-            'Do not delete the oldest file in series: %s Bytes < %s Bytes',
+            'Accumulated size of files in series: %s Bytes (files: %s)',
+            accumulated_size_bytes,
+            ', '.join(filenames)
+        )
+
+        maxsize = 1024 * 1024 * HDF5_SERIES_SIZE_MAX_MB
+        if accumulated_size_bytes < maxsize:
+            log.info(
+                'Do not delete the oldest file in series: %s Bytes < %s Bytes',
+                accumulated_size_bytes,
+                maxsize
+            )
+            return
+
+        log.info(
+            'Accumulated size surpasses limit: %s Bytes > %s Bytes',
             accumulated_size_bytes,
             maxsize
         )
-        return
 
-    log.info(
-        'Accumulated size surpasses limit: %s Bytes > %s Bytes',
-        accumulated_size_bytes,
-        maxsize
-    )
+        # Rely on series index appended to the file name.
+        # >>> re.match('^.+\.[0-9]{4}$', '.0001')
+        # >>> re.match('^.*\.[0-9]{4}$', '0001')
+        # >>> re.match('^.*\.[0-9]{4}$', 'foo.0001')
+        # <re.Match object; span=(0, 8), match='foo.0001'>
+        # >>> re.match('^.*\.[0-9]{4}$', 'foo.00001')
+        # >>>
+        filenames_with_series_index = [
+            fp for fp in filenames if \
+            re.match('^.*\.[0-9]{4}$', fp) is not None
+        ]
 
-    # Rely on series index appended to the file name.
-    # >>> re.match('^.+\.[0-9]{4}$', '.0001')
-    # >>> re.match('^.*\.[0-9]{4}$', '0001')
-    # >>> re.match('^.*\.[0-9]{4}$', 'foo.0001')
-    # <re.Match object; span=(0, 8), match='foo.0001'>
-    # >>> re.match('^.*\.[0-9]{4}$', 'foo.00001')
-    # >>>
-    filenames_with_series_index = [
-        fp for fp in filenames if \
-        re.match('^.*\.[0-9]{4}$', fp) is not None
-    ]
+        # Rely on `sorted` to sort as desired, ascendingly:
+        # >>> sorted(['foo-0005', 'foo-0003', 'foo-0002', 'foo-0004'])
+        # ['foo-0002', 'foo-0003', 'foo-0004', 'foo-0005']
+        filenames_with_series_index_sorted = sorted(filenames_with_series_index)
+        filepaths_sorted = [
+            os.path.join(hdf5_files_dir_path, fn) for \
+            fn in filenames_with_series_index_sorted
+        ]
 
-    # Rely on `sorted` to sort as desired, ascendingly:
-    # >>> sorted(['foo-0005', 'foo-0003', 'foo-0002', 'foo-0004'])
-    # ['foo-0002', 'foo-0003', 'foo-0004', 'foo-0005']
-    filenames_with_series_index_sorted = sorted(filenames_with_series_index)
-    filepaths_sorted = [
-        os.path.join(hdf5_files_dir_path, fn) for \
-        fn in filenames_with_series_index_sorted
-    ]
+        # The first element is the file path to the oldest file in the series.
+        log.info('Identified oldest file in series: %s', filepaths_sorted[0])
+        log.info('Removing file: %s', filepaths_sorted[0])
+        try:
+            # If this fails (for whichever reason) do not crash the program. Maybe
+            # the file was removed underneath us. Maybe there was a transient
+            # problem and removal succeeds upon next attempt. It's not worth
+            # crashing the data acquisition.
+            os.remove(filepaths_sorted[0])
+            return True
+        except Exception as e:
+            log.warning('File removal failed: %s', str(e))
 
-    # The first element is the file path to the oldest file in the series.
-    log.info('Identified oldest file in series: %s', filepaths_sorted[0])
-    log.info('Removing file: %s', filepaths_sorted[0])
-    try:
-        # If this fails (for whichever reason) do not crash the program. Maybe
-        # the file was removed underneath us. Maybe there was a transient
-        # problem and removal succeeds upon next attempt. It's not worth
-        # crashing the data acquisition.
-        os.remove(filepaths_sorted[0])
-        return True
-    except Exception as e:
-        log.warning('File removal failed: %s', str(e))
+    def _write_samples_hdf5_if_enabled(self, samples):
+        """
+        For writing every sample go through the complete life cycle from open()ing
+        the HDF5 file to close()ing it, to minimize the risk for data corruption. As
+        of the complexity of the HDF5 file format this results in quite a number of
+        file accesses. If doing this once per ARGS.sampling_interval (seconds)
+        generates too much overhead a proper solution is to write more than one
+        sample (row) in one go.
+        """
+        if OUTFILE_PATH_HDF5 is None:
+            # That is the signal to not write an HDF5 output file.
+            return
 
+        t0 = time.monotonic()
 
-def _write_samples_hdf5_if_enabled(samples):
-    """
-    For writing every sample go through the complete life cycle from open()ing
-    the HDF5 file to close()ing it, to minimize the risk for data corruption. As
-    of the complexity of the HDF5 file format this results in quite a number of
-    file accesses. If doing this once per ARGS.sampling_interval (seconds)
-    generates too much overhead a proper solution is to write more than one
-    sample (row) in one go.
-    """
-    if OUTFILE_PATH_HDF5 is None:
-        # That is the signal to not write an HDF5 output file.
-        return
+        self._hdf5_file_rotate_if_required()
+        self._prepare_hdf5_file_if_not_yet_existing()
 
-    t0 = time.monotonic()
+        with tables.open_file(OUTFILE_PATH_HDF5, 'a', filters=HDF5_COMP_FILTER) as f:
+            # Look up table based on well-known name.
+            hdf5table = f.root.messer_timeseries
 
-    _hdf5_file_rotate_if_required()
-    _prepare_hdf5_file_if_not_yet_existing()
+            # The pytables way of doing things: "The row attribute of table points to
+            # the Row instance that will be used to write data rows into the table. We
+            # write data simply by assigning the Row instance the values for each row as
+            # if it were a dictionary (although it is actually an extension class),
+            # using the column names as keys".
+            for sample in samples:
+                for key, value in sample.items():
+                    hdf5table.row[key] = value
+                hdf5table.row.append()
 
-    with tables.open_file(OUTFILE_PATH_HDF5, 'a', filters=HDF5_COMP_FILTER) as f:
-        # Look up table based on well-known name.
-        hdf5table = f.root.messer_timeseries
+            # Leaving the context means flushing the table I/O buffer, updating all
+            # meta data in the HDF file, and closing the file both logically from a
+            # HDF5 perspective, but also from the kernel's / file system's
+            # perspective.
 
-        # The pytables way of doing things: "The row attribute of table points to
-        # the Row instance that will be used to write data rows into the table. We
-        # write data simply by assigning the Row instance the values for each row as
-        # if it were a dictionary (although it is actually an extension class),
-        # using the column names as keys".
-        for sample in samples:
-            for key, value in sample.items():
-                hdf5table.row[key] = value
-            hdf5table.row.append()
+        log.info(
+            'Updated HDF5 file: wrote %s sample(s) in %.5f s',
+            len(samples),
+            time.monotonic() - t0,
+        )
 
-        # Leaving the context means flushing the table I/O buffer, updating all
-        # meta data in the HDF file, and closing the file both logically from a
-        # HDF5 perspective, but also from the kernel's / file system's
-        # perspective.
+    def _write_sample_csv_if_enabled(self, sample):
+        global CSV_COLUMN_HEADER_WRITTEN
 
-    log.info(
-        'Updated HDF5 file: wrote %s sample(s) in %.5f s',
-        len(samples),
-        time.monotonic() - t0,
-    )
+        if OUTFILE_PATH_CSV is None:
+            # That *is* the signal to not write a CSV output file.
+            return
 
+        self._prepare_csv_file_if_not_yet_existing()
 
-def _write_sample_csv_if_enabled(sample):
-    global CSV_COLUMN_HEADER_WRITTEN
+        samplevalues = tuple(v for k, v in sample.items())
 
-    if OUTFILE_PATH_CSV is None:
-        # That *is* the signal to not write a CSV output file.
-        return
+        # Apply a bit of custom formatting.
+        # Note(JP): store these format strings closer to the column listing,
+        # and assemble a format string dynamically.
+        csv_sample_row = (
+            '%.6f, %s, %5.2f, %5.2f, %5.2f, '
+            '%d, %d, %d, %d, %d, %d, %d, %d, %d, '
+            '%d, %5.2f, %5.2f, %5.2f, %d, %d, %d, %d, %d, %d\n' % samplevalues
+        )
 
-    _prepare_csv_file_if_not_yet_existing()
+        with open(OUTFILE_PATH_CSV, 'a') as f:
 
-    samplevalues = tuple(v for k, v in sample.items())
+            # Write the column header to the CSV file if not yet done. Do that
+            # here so that the column names can be explicitly read from an
+            # (ordered) sample dicitionary.
+            if not CSV_COLUMN_HEADER_WRITTEN:
+                f.write(
+                    ','.join(k for k in sample.keys()).encode('ascii') + b'\n')
+                CSV_COLUMN_HEADER_WRITTEN = True
 
-    # Apply a bit of custom formatting.
-    # Note(JP): store these format strings closer to the column listing,
-    # and assemble a format string dynamically.
-    csv_sample_row = (
-        '%.6f, %s, %5.2f, %5.2f, %5.2f, '
-        '%d, %d, %d, %d, %d, %d, %d, %d, %d, '
-        '%d, %5.2f, %5.2f, %5.2f, %d, %d, %d, %d, %d, %d\n' % samplevalues
-    )
-
-    with open(OUTFILE_PATH_CSV, 'a') as f:
-
-        # Write the column header to the CSV file if not yet done. Do that
-        # here so that the column names can be explicitly read from an
-        # (ordered) sample dicitionary.
-        if not CSV_COLUMN_HEADER_WRITTEN:
-            f.write(
-                ','.join(k for k in sample.keys()).encode('ascii') + b'\n')
-            CSV_COLUMN_HEADER_WRITTEN = True
-
-        f.write(csv_sample_row.encode('ascii'))
+            f.write(csv_sample_row.encode('ascii'))
 
 
 def generate_samples_indefinitely(pid):
