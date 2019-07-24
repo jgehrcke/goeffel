@@ -178,37 +178,31 @@ def main():
 
     process_cmdline_args()
 
-    # Set up the infrastructure for decoupling measurement (sample collection)
-    # from persisting the data.
-    samplequeue = multiprocessing.Queue()
+    sampleq = multiprocessing.Queue()
 
-    log.info(
-        'Collect time series for the following metrics: \n  %s',
-        '\n  '.join(k for k in HDF5_SCHEMA.schema_dict.keys()))
-
-    samplewriter = multiprocessing.Process(
+    consumer_process = multiprocessing.Process(
         target=sample_writer_process,
-        args=(samplequeue,)
+        args=(sampleq,)
     )
-    samplewriter.start()
+    consumer_process.start()
 
     try:
-        mainloop(samplequeue, samplewriter)
+        mainloop(sampleq, consumer_process)
     except KeyboardInterrupt:
         sys.exit(0)
     finally:
         # Signal to the worker that it is supposed to (cleanly) shut down. Wait
         # for the queue buffer to be flushed to the worker process, and wait for
         # the sample writer process to terminate.
-        samplequeue.put(None)
-        samplequeue.close()
+        sampleq.put(None)
+        sampleq.close()
         log.info('Wait for producer buffer to become empty')
-        samplequeue.join_thread()
-        samplewriter.join()
+        sampleq.join_thread()
+        consumer_process.join()
         log.info('Sample writer process terminated')
 
 
-def mainloop(samplequeue, samplewriter):
+def mainloop(sampleq, consumer_process):
     """
     Wraps the main sampling loop. Is intended to be interruptible via SIGINT /
     Ctrl+C, and therefore wrapped in a `KeyboardInterrupt` exception handler
@@ -221,7 +215,7 @@ def mainloop(samplequeue, samplewriter):
     # (as of process not existing, insufficient permissions, etc.).
     if ARGS.pid is not None:
         try:
-            sample_process(ARGS.pid, samplequeue, samplewriter)
+            sample_process(ARGS.pid, sampleq, consumer_process)
         except psutil.Error as exc:
             # It's an expected condition when the process goes away, so not an
             # error.
@@ -241,7 +235,7 @@ def mainloop(samplequeue, samplewriter):
             continue
 
         try:
-            sample_process(pid, samplequeue, samplewriter)
+            sample_process(pid, sampleq, consumer_process)
         except psutil.Error as exc:
             log.info('Cannot inspect process: %s', exc.msg)
 
@@ -413,7 +407,14 @@ def process_cmdline_args():
     # of the program to consume it later.
     global ARGS
     ARGS = parser.parse_args()
+
+    # Do custom/advanced command line argument processing.
     _process_cmdline_args_advanced()
+
+    # By now the set of metrics to be acquired is known. Log it.
+    log.info(
+        'Collect time series for the following metrics: \n  %s',
+        '\n  '.join(k for k in HDF5_SCHEMA.schema_dict.keys()))
 
 
 def _process_cmdline_args_advanced():
@@ -873,10 +874,10 @@ def _write_sample_csv_if_enabled(sample):
         f.write(csv_sample_row.encode('ascii'))
 
 
-def sample_process(pid, samplequeue, samplewriter):
+def sample_process(pid, sampleq, samplewriter):
     """
     Sample (periodically inspect) process with ID `pid`, and put each sample (a
-    collection of values associated with a timestamp) into the `samplequeue`.
+    collection of values associated with a timestamp) into the `sampleq`.
     """
 
     for sample in generate_samples(pid):
@@ -894,7 +895,7 @@ def sample_process(pid, samplequeue, samplewriter):
         # official interface as far as I see. It might be advisable to prepare
         # for backpressure by applying some timeout control, and by potentially
         # wrapping the put() call in a control loop.
-        samplequeue.put(sample)
+        sampleq.put(sample)
 
 
 def generate_samples(pid):
