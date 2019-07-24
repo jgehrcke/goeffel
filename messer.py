@@ -41,7 +41,8 @@ process-specific metrics into context.
 
 This program has been written for and tested on CPython 3.5 and 3.6 on Linux.
 
----
+"""
+"""
 
 This was born out of a need for solid tooling. We started with pidstat from
 sysstat, launched in the following manner:
@@ -248,9 +249,16 @@ def main():
 
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description='A tool for measuring process and system resource utilization.',
+        description='Measures process and system resource utilization.',
         epilog=textwrap.dedent(__doc__).strip()
     )
+
+    # Change "optional arguments:" to "Arguments:" in the --help output.
+    # https://stackoverflow.com/a/16981688
+    try:
+        parser._optionals.title = "Arguments"
+    except AttributeError:
+        pass
 
     what = parser.add_mutually_exclusive_group(required=True)
     what.add_argument(

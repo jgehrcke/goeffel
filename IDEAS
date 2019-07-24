@@ -41,9 +41,4 @@
 
 - measure resource utilization of messer with another instance of messer.
 
-- Note that this program must be run as root (in docs) and also generate nice
-  error messages around that.
-
-- Document the fact that -1 has a special meaning for some metrics.
-
 - Replace HDF5 type for columns with unit 'percent' to be Float16 instead of Float32?
