@@ -179,46 +179,71 @@ def main():
     process_cmdline_args()
 
     sampleq = multiprocessing.Queue()
-
     consumer_process = multiprocessing.Process(
-        target=sample_writer_process,
+        target=sample_consumer_process,
         args=(sampleq,)
     )
     consumer_process.start()
 
     try:
-        mainloop(sampleq, consumer_process)
+        sampleloop(sampleq, consumer_process)
     except KeyboardInterrupt:
         sys.exit(0)
     finally:
-        # Signal to the worker that it is supposed to (cleanly) shut down. Wait
-        # for the queue buffer to be flushed to the worker process, and wait for
-        # the sample writer process to terminate.
+        # Signal to the consumer process that it is supposed to (cleanly) shut
+        # down. Wait for the producer/queue buffer to be consumed completely by
+        # the consumer process, and also wait for consumer process to cleanly
+        # terminate (to properly persist/dump all samples).
         sampleq.put(None)
         sampleq.close()
+
         log.info('Wait for producer buffer to become empty')
         sampleq.join_thread()
+
+        log.info('Wait for consumer process to terminate')
         consumer_process.join()
-        log.info('Sample writer process terminated')
+        log.info('Sample consumer process terminated')
 
 
-def mainloop(sampleq, consumer_process):
+def sampleloop(sampleq, consumer_process):
     """
     Wraps the main sampling loop. Is intended to be interruptible via SIGINT /
     Ctrl+C, and therefore wrapped in a `KeyboardInterrupt` exception handler
     in the caller.
     """
+
     import psutil
+
+    def _sample_process_loop(pid, sampleq, consumer_process):
+        """
+        Sample (periodically inspect) process with ID `pid`, and put each sample
+        (a collection of values associated with a timestamp) into the `sampleq`.
+
+        `sampleq.put(sample)` writes the data to a buffer in the current
+        (producer) process. A thread (in the producer process) communicates it
+        through a pipe to the consumer process which outputs the data.
+
+        Note(JP): the feeder thread buffer is of limited size and it's not
+        configurable via an official interface as far as I see. It might be
+        advisable to prepare for backpressure by applying some timeout control,
+        and by potentially wrapping the put() call in a control loop.
+
+        Raises: psutil.Error: when the monitored process does not exist or goes
+            away.
+        """
+        for sample in generate_samples_indefinitely(pid):
+            if not consumer_process.is_alive():
+                sys.exit('The sample consumer process is gone. Exit.')
+            sampleq.put(sample)
 
     # Handle case where a specific (constant) PID was provided on the command
     # line. Error out and exit program in the moment the PID cannot be monitored
     # (as of process not existing, insufficient permissions, etc.).
     if ARGS.pid is not None:
         try:
-            sample_process(ARGS.pid, sampleq, consumer_process)
+            _sample_process_loop(ARGS.pid, sampleq, consumer_process)
         except psutil.Error as exc:
-            # It's an expected condition when the process goes away, so not an
-            # error.
+            # An expected condition when the process goes away, so not an error.
             log.info('Cannot inspect process: %s', exc.msg)
             sys.exit(1)
 
@@ -235,10 +260,9 @@ def mainloop(sampleq, consumer_process):
             continue
 
         try:
-            sample_process(pid, sampleq, consumer_process)
+            _sample_process_loop(pid, sampleq, consumer_process)
         except psutil.Error as exc:
             log.info('Cannot inspect process: %s', exc.msg)
-
 
 
 class HDF5Schema:
@@ -605,7 +629,7 @@ def _prepare_csv_file_if_not_yet_existing():
         f.write(b'# schema version: %s\n' (MESSER_SAMPLE_SCHEMA_VERSION, ))
 
 
-def sample_writer_process(queue):
+def sample_consumer_process(queue):
     """
     This function is being run in a child process.
 
@@ -874,31 +898,7 @@ def _write_sample_csv_if_enabled(sample):
         f.write(csv_sample_row.encode('ascii'))
 
 
-def sample_process(pid, sampleq, samplewriter):
-    """
-    Sample (periodically inspect) process with ID `pid`, and put each sample (a
-    collection of values associated with a timestamp) into the `sampleq`.
-    """
-
-    for sample in generate_samples(pid):
-
-        # TODO(JP): if the sample writer crashes we want to crash the entire
-        # program.
-
-        if not samplewriter.is_alive():
-            sys.exit('The sample writer process terminated. Exit.')
-
-        # This writes the data to a buffer in the current process, and a
-        # background thread communicates it through a pipe to the worker process
-        # which outputs the data (to stdout or to disk). Note(JP): the feeder
-        # thread buffer is of limited size and it's not configurable via an
-        # official interface as far as I see. It might be advisable to prepare
-        # for backpressure by applying some timeout control, and by potentially
-        # wrapping the put() call in a control loop.
-        sampleq.put(sample)
-
-
-def generate_samples(pid):
+def generate_samples_indefinitely(pid):
     """
     Generator for generating samples. Each sample is a collection of values
     associated with a timestamp.

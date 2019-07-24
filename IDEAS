@@ -42,3 +42,6 @@
 - measure resource utilization of messer with another instance of messer.
 
 - Replace HDF5 type for columns with unit 'percent' to be Float16 instead of Float32?
+
+- architecture: if the sample writer crashes for whichever reason we want to
+  crash the entire program, right?
