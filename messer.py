@@ -174,6 +174,79 @@ logging.basicConfig(
 )
 
 
+def main():
+
+    process_cmdline_args()
+
+    # Set up the infrastructure for decoupling measurement (sample collection)
+    # from persisting the data.
+    samplequeue = multiprocessing.Queue()
+
+    log.info(
+        'Collect time series for the following metrics: \n  %s',
+        '\n  '.join(k for k in HDF5_SCHEMA.schema_dict.keys()))
+
+    samplewriter = multiprocessing.Process(
+        target=sample_writer_process,
+        args=(samplequeue,)
+    )
+    samplewriter.start()
+
+    try:
+        mainloop(samplequeue, samplewriter)
+    except KeyboardInterrupt:
+        sys.exit(0)
+    finally:
+        # Signal to the worker that it is supposed to (cleanly) shut down. Wait
+        # for the queue buffer to be flushed to the worker process, and wait for
+        # the sample writer process to terminate.
+        samplequeue.put(None)
+        samplequeue.close()
+        log.info('Wait for producer buffer to become empty')
+        samplequeue.join_thread()
+        samplewriter.join()
+        log.info('Sample writer process terminated')
+
+
+def mainloop(samplequeue, samplewriter):
+    """
+    Wraps the main sampling loop. Is intended to be interruptible via SIGINT /
+    Ctrl+C, and therefore wrapped in a `KeyboardInterrupt` exception handler
+    in the caller.
+    """
+    import psutil
+
+    # Handle case where a specific (constant) PID was provided on the command
+    # line. Error out and exit program in the moment the PID cannot be monitored
+    # (as of process not existing, insufficient permissions, etc.).
+    if ARGS.pid is not None:
+        try:
+            sample_process(ARGS.pid, samplequeue, samplewriter)
+        except psutil.Error as exc:
+            # It's an expected condition when the process goes away, so not an
+            # error.
+            log.info('Cannot inspect process: %s', exc.msg)
+            sys.exit(1)
+
+    # Handle the case where a PID command was provided on the command line. That
+    # is, implement a PID-finding loop which indefinitely retries to resolve a
+    # new PID once the current one seems to be invalid.
+    while True:
+
+        pid = pid_from_cmd(ARGS.pid_command)
+
+        if pid is None:
+            # The PID command did not succeed. Try again in next iteration.
+            time.sleep(PROCESS_PID_POLL_INTERVAL_SECONDS)
+            continue
+
+        try:
+            sample_process(pid, samplequeue, samplewriter)
+        except psutil.Error as exc:
+            log.info('Cannot inspect process: %s', exc.msg)
+
+
+
 class HDF5Schema:
     """
     Manage a pytables HDF5 schema dictionary.
@@ -243,40 +316,6 @@ HDF5_SCHEMA = HDF5Schema()
 # modified from code below). The first file in a series has index 1. The index
 # is written to the HDF5 table meta data section.
 HDF5_FILE_SERIES_INDEX = 1
-
-
-def main():
-
-    process_cmdline_args()
-
-    # Set up the infrastructure for decoupling measurement (sample collection)
-    # from persisting the data.
-    samplequeue = multiprocessing.Queue()
-
-    log.info(
-        'Collect time series for the following metrics: \n  %s',
-        '\n  '.join(k for k in HDF5_SCHEMA.schema_dict.keys()))
-
-    samplewriter = multiprocessing.Process(
-        target=sample_writer_process,
-        args=(samplequeue,)
-    )
-    samplewriter.start()
-
-    try:
-        mainloop(samplequeue, samplewriter)
-    except KeyboardInterrupt:
-        sys.exit(0)
-    finally:
-        # Signal to the worker that it is supposed to (cleanly) shut down. Wait
-        # for the queue buffer to be flushed to the worker process, and wait for
-        # the sample writer process to terminate.
-        samplequeue.put(None)
-        samplequeue.close()
-        log.info('Wait for producer buffer to become empty')
-        samplequeue.join_thread()
-        samplewriter.join()
-        log.info('Sample writer process terminated')
 
 
 def process_cmdline_args():
@@ -832,44 +871,6 @@ def _write_sample_csv_if_enabled(sample):
             CSV_COLUMN_HEADER_WRITTEN = True
 
         f.write(csv_sample_row.encode('ascii'))
-
-
-def mainloop(samplequeue, samplewriter):
-    """
-    Wraps the main sampling loop. Is intended to be interruptible via SIGINT /
-    Ctrl+C, and therefore wrapped in a `KeyboardInterrupt` exception handler
-    in the caller.
-    """
-    import psutil
-
-    # Handle case where a specific (constant) PID was provided on the command
-    # line. Error out and exit program in the moment the PID cannot be monitored
-    # (as of process not existing, insufficient permissions, etc.).
-    if ARGS.pid is not None:
-        try:
-            sample_process(ARGS.pid, samplequeue, samplewriter)
-        except psutil.Error as exc:
-            # It's an expected condition when the process goes away, so not an
-            # error.
-            log.info('Cannot inspect process: %s', exc.msg)
-            sys.exit(1)
-
-    # Handle the case where a PID command was provided on the command line. That
-    # is, implement a PID-finding loop which indefinitely retries to resolve a
-    # new PID once the current one seems to be invalid.
-    while True:
-
-        pid = pid_from_cmd(ARGS.pid_command)
-
-        if pid is None:
-            # The PID command did not succeed. Try again in next iteration.
-            time.sleep(PROCESS_PID_POLL_INTERVAL_SECONDS)
-            continue
-
-        try:
-            sample_process(pid, samplequeue, samplewriter)
-        except psutil.Error as exc:
-            log.info('Cannot inspect process: %s', exc.msg)
 
 
 def sample_process(pid, samplequeue, samplewriter):
