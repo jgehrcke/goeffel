@@ -70,6 +70,11 @@ and plotting the data, making it too error-prone and not production-ready.
 
 - Must be run with `root` privileges.
 
+- The value `-1` has a special meaning for some metrics
+  ([NaN](https://en.wikipedia.org/wiki/NaN), which cannot be represented
+  properly in HDF5). Example: A disk write latency of `-1 ms` means that no
+  write happened in the corresponding time interval.
+
 - The highest meaningful sampling rate is limited by the kernel's timer and
   bookkeeping system.
 
