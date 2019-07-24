@@ -42,8 +42,8 @@ process-specific metrics into context.
 This program has been written for and tested on CPython 3.5 and 3.6 on Linux.
 
 """
-"""
 
+"""
 This was born out of a need for solid tooling. We started with pidstat from
 sysstat, launched in the following manner:
 
@@ -247,6 +247,40 @@ HDF5_FILE_SERIES_INDEX = 1
 
 def main():
 
+    process_cmdline_args()
+
+    # Set up the infrastructure for decoupling measurement (sample collection)
+    # from persisting the data.
+    samplequeue = multiprocessing.Queue()
+
+    log.info(
+        'Collect time series for the following metrics: \n  %s',
+        '\n  '.join(k for k in HDF5_SCHEMA.schema_dict.keys()))
+
+    samplewriter = multiprocessing.Process(
+        target=sample_writer_process,
+        args=(samplequeue,)
+    )
+    samplewriter.start()
+
+    try:
+        mainloop(samplequeue, samplewriter)
+    except KeyboardInterrupt:
+        sys.exit(0)
+    finally:
+        # Signal to the worker that it is supposed to (cleanly) shut down. Wait
+        # for the queue buffer to be flushed to the worker process, and wait for
+        # the sample writer process to terminate.
+        samplequeue.put(None)
+        samplequeue.close()
+        log.info('Wait for producer buffer to become empty')
+        samplequeue.join_thread()
+        samplewriter.join()
+        log.info('Sample writer process terminated')
+
+
+def process_cmdline_args():
+
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description='Measures process and system resource utilization.',
@@ -336,19 +370,121 @@ def main():
         help='Data sampling interval (default: 0.5 s).'
     )
 
+    # Do basic command line argument validation. Populate `ARGS` for the rest
+    # of the program to consume it later.
     global ARGS
     ARGS = parser.parse_args()
+    _process_cmdline_args_advanced()
 
-    process_outfile_args()
 
-    # Import here, delayed, instead of in the header (otherwise the command line
-    # help / error reporting is noticeably slowed down).
-    global psutil
-    import psutil
+def _process_cmdline_args_advanced():
+
+    def _process_outfile_args():
+
+        # Determine path for HDF5 output file. `None` signals to not write one.
+        if ARGS.no_hdf5:
+            path_hdf5 = None
+        elif ARGS.outfile_hdf5_path:
+            path_hdf5 = ARGS.outfile_hdf5_path
+        else:
+            path_hdf5 = f'{ARGS.hdf5_path_prefix}_{INVOCATION_TIME_LOCAL_STRING}.hdf5'
+
+        # Determine path for CSV output file. `None` signals to not write one.
+        if not ARGS.enable_csv:
+            path_csv = None
+        elif ARGS.outfile_csv_path:
+            path_csv = ARGS.outfile_csv_path
+        else:
+            path_csv = f'{ARGS.csv_path_prefix}_{INVOCATION_TIME_LOCAL_STRING}.csv'
+
+        if path_hdf5:
+            if os.path.exists(path_hdf5):
+                sys.exit(f'Error: path exists: {path_hdf5}')
+            log.info(f'Will write data file {path_hdf5}')
+
+        if path_csv:
+            if os.path.exists(path_csv):
+                sys.exit(f'Error: path exists: {path_csv}')
+            log.info(f'Will write data file {path_csv}')
+
+        if path_csv:
+            # TODO(JP): properly validate / test CSV output.
+            raise NotImplementedError
+
+        # Expose config to the rest of the program.
+        global OUTFILE_PATH_HDF5
+        global OUTFILE_PATH_CSV
+        OUTFILE_PATH_HDF5 = path_hdf5
+        OUTFILE_PATH_CSV = path_csv
+
+    def _process_diskstats_args():
+
+        def _add_dev_columns(devname):
+
+            devname = _disk_dev_name_to_metric_name(devname)
+
+            # Dynamically add columns to the HDF5 table schema.
+            column_names = [
+                'disk_' + devname + '_util_percent',
+                'disk_' + devname + '_write_latency_ms',
+                'disk_' + devname + '_read_latency_ms',
+                'disk_' + devname + '_merged_read_rate_hz',
+                'disk_' + devname + '_merged_write_rate_hz',
+                'disk_' + devname + '_userspace_read_rate_hz',
+                'disk_' + devname + '_userspace_write_rate_hz',
+            ]
+
+            # Note(JP): Windows support might be easy to add by conditionally
+            # accounting for certain disk metrics.
+            for n in column_names:
+                HDF5_SCHEMA.add_column(colname=n, coltype=tables.Float32Col)
+
+        if not ARGS.diskstats:
+            return
+
+        # Import here, delayed, instead of in the header (otherwise the command
+        # line help / error reporting is noticeably slowed down). global psutil
+        import psutil
+
+        all_known_devnames = list(psutil.disk_io_counters(perdisk=True).keys())
+
+        # Add special notion of 'all' device.
+        valid_options = all_known_devnames + ['all']
+
+        # Validate the provided arguments.
+        for devname in ARGS.diskstats:
+            if devname not in valid_options:
+                sys.exit('Invalid disk device name: %s\nAvailable names: %s' % (
+                    devname, ', '.join(valid_options)))
+
+        # Handle special case first.
+        if 'all' in ARGS.diskstats:
+            # Re-populate ARGS.diskstats with all devices.
+            ARGS.diskstats = all_known_devnames
+
+        for devname in ARGS.diskstats:
+            _add_dev_columns(devname)
 
     # Do more custom argument processing.
-    process_diskstats_args()
 
+    # The sample interval should ideally not be smaller than 0.5 seconds so that
+    # kernel counter update errors and other timing errors do not dominate the
+    # data emitted by this program. Relevant reference:
+    # https://elinux.org/Kernel_Timer_Systems
+    # From the `cpustat` documentation:
+    # "Linux CPU time accounting is done in terms of whole "clock ticks", which
+    # are often 100ms. This can cause some strange values when sampling every
+    # 200ms."
+    if ARGS.sampling_interval < 0.3:
+        sys.exit(
+            'The sampling interval is probably too small, and I cannot '
+            'guarantee meaningful data collection. Exit.'
+        )
+
+    _process_outfile_args()
+    _process_diskstats_args()
+
+    # Add system-wide metrics to the schema if not instructed otherwise.
     if not ARGS.no_system_metrics:
 
         for cn in ('system_loadavg1', 'system_loadavg5','system_loadavg15'):
@@ -365,133 +501,6 @@ def main():
                 'system_mem_active',
                 'system_mem_inactive'):
             HDF5_SCHEMA.add_column(colname=cn, coltype=tables.UInt64Col)
-
-    # The sample interval should ideally not be smaller than 0.5 seconds so that
-    # kernel counter update errors and other timing errors do not dominate the
-    # data emitted by this program. Relevant reference:
-    # https://elinux.org/Kernel_Timer_Systems
-    # From the `cpustat` documentation:
-    # "Linux CPU time accounting is done in terms of whole "clock ticks", which
-    # are often 100ms. This can cause some strange values when sampling every
-    # 200ms."
-    if ARGS.sampling_interval < 0.3:
-        sys.exit(
-            'The sampling interval is probably too small, and I cannot '
-            'guarantee meaningful data collection. Exit.'
-        )
-
-    # Set up the infrastructure for decoupling measurement (sample collection)
-    # from persisting the data.
-    samplequeue = multiprocessing.Queue()
-
-    log.info(
-        'Collect time series for the following metrics: \n  %s',
-        '\n  '.join(k for k in HDF5_SCHEMA.schema_dict.keys()))
-
-    samplewriter = multiprocessing.Process(
-        target=sample_writer_process,
-        args=(samplequeue,)
-    )
-    samplewriter.start()
-
-    try:
-        mainloop(samplequeue, samplewriter)
-    except KeyboardInterrupt:
-        sys.exit(0)
-    finally:
-        # Signal to the worker that it is supposed to (cleanly) shut down. Wait
-        # for the queue buffer to be flushed to the worker process, and wait for
-        # the sample writer process to terminate.
-        samplequeue.put(None)
-        samplequeue.close()
-        log.info('Wait for producer buffer to become empty')
-        samplequeue.join_thread()
-        samplewriter.join()
-        log.info('Sample writer process terminated')
-
-
-def process_outfile_args():
-
-    # Determine path for HDF5 output file. `None` signals to not write one.
-    if ARGS.no_hdf5:
-        path_hdf5 = None
-    elif ARGS.outfile_hdf5_path:
-        path_hdf5 = ARGS.outfile_hdf5_path
-    else:
-        path_hdf5 = f'{ARGS.hdf5_path_prefix}_{INVOCATION_TIME_LOCAL_STRING}.hdf5'
-
-    # Determine path for CSV output file. `None` signals to not write one.
-    if not ARGS.enable_csv:
-        path_csv = None
-    elif ARGS.outfile_csv_path:
-        path_csv = ARGS.outfile_csv_path
-    else:
-        path_csv = f'{ARGS.csv_path_prefix}_{INVOCATION_TIME_LOCAL_STRING}.csv'
-
-    if path_hdf5:
-        if os.path.exists(path_hdf5):
-            sys.exit(f'Error: path exists: {path_hdf5}')
-        log.info(f'Will write data file {path_hdf5}')
-
-    if path_csv:
-        if os.path.exists(path_csv):
-            sys.exit(f'Error: path exists: {path_csv}')
-        log.info(f'Will write data file {path_csv}')
-
-    if path_csv:
-        # TODO(JP): properly validate / test CSV output.
-        raise NotImplementedError
-
-    # Expose config to the rest of the program.
-    global OUTFILE_PATH_HDF5
-    global OUTFILE_PATH_CSV
-    OUTFILE_PATH_HDF5 = path_hdf5
-    OUTFILE_PATH_CSV = path_csv
-
-
-def process_diskstats_args():
-
-    def _add_dev_columns(devname):
-
-        devname = _disk_dev_name_to_metric_name(devname)
-
-        # Dynamically add columns to the HDF5 table schema.
-        column_names = [
-            'disk_' + devname + '_util_percent',
-            'disk_' + devname + '_write_latency_ms',
-            'disk_' + devname + '_read_latency_ms',
-            'disk_' + devname + '_merged_read_rate_hz',
-            'disk_' + devname + '_merged_write_rate_hz',
-            'disk_' + devname + '_userspace_read_rate_hz',
-            'disk_' + devname + '_userspace_write_rate_hz',
-        ]
-
-        # Note(JP): Windows support might be easy to add by conditionally
-        # accounting for certain disk metrics.
-        for n in column_names:
-            HDF5_SCHEMA.add_column(colname=n, coltype=tables.Float32Col)
-
-    if not ARGS.diskstats:
-        return
-
-    all_known_devnames = list(psutil.disk_io_counters(perdisk=True).keys())
-
-    # Add special notion of 'all' device.
-    valid_options = all_known_devnames + ['all']
-
-    # Validate the provided arguments.
-    for devname in ARGS.diskstats:
-        if devname not in valid_options:
-            sys.exit('Invalid disk device name: %s\nAvailable names: %s' % (
-                devname, ', '.join(valid_options)))
-
-    # Handle special case first.
-    if 'all' in ARGS.diskstats:
-        # Re-populate ARGS.diskstats with all devices.
-        ARGS.diskstats = all_known_devnames
-
-    for devname in ARGS.diskstats:
-        _add_dev_columns(devname)
 
 
 def _disk_dev_name_to_metric_name(devname):
@@ -831,6 +840,7 @@ def mainloop(samplequeue, samplewriter):
     Ctrl+C, and therefore wrapped in a `KeyboardInterrupt` exception handler
     in the caller.
     """
+    import psutil
 
     # Handle case where a specific (constant) PID was provided on the command
     # line. Error out and exit program in the moment the PID cannot be monitored
@@ -895,7 +905,8 @@ def generate_samples(pid):
     `psutil.NoSuchProcess`).
     """
 
-    # Put `psutil` into local namespace (this does not re-import, is fast).
+    # Put `psutil` into local namespace (this is fast if it was re-imported
+    # before).
     import psutil
 
     # Prepare process analysis. This does not yet look at process metrics, but
