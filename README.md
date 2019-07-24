@@ -2,48 +2,42 @@
 
 Measures the resource utilization of a specific process over time.
 
-Built for Linux.
+This program also measures the utilization / saturation of system-wide resources
+making it straightforward to put the process-specific metrics into context.
 
-In addition to sampling process-specific data this program also measures the
-utilization / saturation / error rate of system-wide resources making it
-straightforward to put the process-specific metrics into context.
+Built for Linux. Windows and Mac OS support might come.
 
-Highlights:
+**Highlights**:
 
-- High sampling rate.
-- Can inspect a program subject to process ID changes. This is useful for
-  longevity experiments when the program you want to monitor is expected to
-  occasionally restart (for instance as of fail-over scenarios).
-- Messer helps keeping the data organized: the time series data is written into
-  [HDF5](https://en.wikipedia.org/wiki/Hierarchical_Data_Format) files (
-  annotated with relevant metadata such as program invocation time, system
-  hostname, and Messer software version).
+- High sampling rate: by default, Messer uses a sampling interval of 0.5 seconds
+  for making narrow spikes visible.
+- Messer is built for monitoring a program subject to process ID changes. This
+  is useful for longevity experiments when the monitored process occasionaly
+  restarts (for instance as of fail-over scenarios).
+- Messer can run unsupervised and infinitely long with predictable disk space
+  requirements (it applies an output file rotation and retention policy).
+- Messer helps keeping data organized: time series data is written into
+  [HDF5](https://en.wikipedia.org/wiki/Hierarchical_Data_Format) files, and
+  annotated with relevant metadata such as the program invocation time, system
+  hostname, and Messer software version.
 - Messer comes with a data plotting tool (separate from the data acquisition
   program).
-
-Messer values measurement correctness very highly. Some aspects:
-
-- It can use a sampling interval of 0.5 seconds for making narrow spikes
-  visible. Note: the highest meaningful sampling rate is limited by the kernel's
-  timer and bookkeeping system.
-- The core sampling loop does little work besides the measurement itself.
-- The measurement process which runs the core sampling loop writes each sample
-  to a queue. A separate process consumes this queue and persists the time
-  series data to disk, for later inspection. This keeps the sampling rate
-  predictable upon disk write latency spikes, or generally upon backpressure.
-  This matters especially in cloud environments where we sometimes see fsync
-  latencies of multiple seconds).
+- Messer values measurement correctness very highly. The core sampling loop does
+  little work besides the measurement itself: it writes each sample to a queue.
+  A separate process consumes this queue and persists the time series data to
+  disk, for later inspection. This keeps the sampling rate predictable upon disk
+  write latency spikes, or generally upon backpressure. This matters especially
+  in cloud environments where we sometimes see fsync latencies of multiple
+  seconds.
 
 
 ## Motivation
 
 This was born out of a need for solid tooling. We started with [pidstat from
 sysstat](https://github.com/sysstat/sysstat/blob/master/pidstat.c), launched as
-`pidstat -hud -p $PID 1 1`.
-
-We found that it does not properly account for multiple threads running in the
-same process, and that various issues in that regard exist in this program
-across various versions (see
+`pidstat -hud -p $PID 1 1`. We found that it does not properly account for
+multiple threads running in the same process, and that various issues in that
+regard exist in this program across various versions (see
 [here](https://github.com/sysstat/sysstat/issues/73#issuecomment-349946051),
 [here](https://github.com/sysstat/sysstat/commit/52977c479), and
 [here](https://github.com/sysstat/sysstat/commit/a63e87996)).
@@ -66,10 +60,6 @@ and plotting the data, making it too error-prone and not production-ready.
 
 ## Notes
 
-- Messer implements an output file rotation and retention concept making it
-  suitable for long-term usage (if the time series data from a measurement run
-  grows beyond a certain amount, Messer removes the oldest chunk).
-
 - Messer tries to not asymmetrically hide measurement uncertainty. For example,
   you might see it measure a CPU utilization of a single-threaded process
   slightly larger than 100 %. That's simply the measurement error. In other
@@ -78,33 +68,10 @@ and plotting the data, making it too error-prone and not production-ready.
   theory not exceed a certain threshold
   ([example](https://github.com/sysstat/sysstat/commit/52977c479d3de1cb2535f896273d518326c26722)).
 
+- Must be run with `root` privileges.
 
-## Valuable references
-
-External references on the subject matter that I found useful during
-development.
-
-About system performance measurement, and kernel time bookkeeping:
-
-- http://www.brendangregg.com/usemethod.html
-- https://www.vividcortex.com/blog/monitoring-and-observability-with-use-and-red
-- https://github.com/uber-common/cpustat/blob/master/README.md
-- https://elinux.org/Kernel_Timer_Systems
-- https://github.com/Leo-G/DevopsWiki/wiki/How-Linux-CPU-Usage-Time-and-Percentage-is-calculated
-
-About disk I/O statistics:
-
-- https://www.xaprb.com/blog/2010/01/09/how-linux-iostat-computes-its-results/
-- https://www.kernel.org/doc/Documentation/iostats.txt
-- https://blog.serverfault.com/2010/07/06/777852755/ (interpreting iostat output)
-- https://unix.stackexchange.com/a/462732 (What are merged writes?)
-- https://stackoverflow.com/a/8512978 (what is`%util` in iostat?)
-- https://coderwall.com/p/utc42q/understanding-iostat
-- https://www.percona.com/doc/percona-toolkit/LATEST/pt-diskstats.html
-
-Others:
-
-- https://serverfault.com/a/85481/121951 (about system memory statistics)
+- The highest meaningful sampling rate is limited by the kernel's timer and
+  bookkeeping system.
 
 
 ## Measurands (columns, and their units)
@@ -190,3 +157,31 @@ Mean over the past sampling interval.
 
 
 (list incomplete)
+
+
+## Valuable references
+
+External references on the subject matter that I found useful during
+development.
+
+About system performance measurement, and kernel time bookkeeping:
+
+- http://www.brendangregg.com/usemethod.html
+- https://www.vividcortex.com/blog/monitoring-and-observability-with-use-and-red
+- https://github.com/uber-common/cpustat/blob/master/README.md
+- https://elinux.org/Kernel_Timer_Systems
+- https://github.com/Leo-G/DevopsWiki/wiki/How-Linux-CPU-Usage-Time-and-Percentage-is-calculated
+
+About disk I/O statistics:
+
+- https://www.xaprb.com/blog/2010/01/09/how-linux-iostat-computes-its-results/
+- https://www.kernel.org/doc/Documentation/iostats.txt
+- https://blog.serverfault.com/2010/07/06/777852755/ (interpreting iostat output)
+- https://unix.stackexchange.com/a/462732 (What are merged writes?)
+- https://stackoverflow.com/a/8512978 (what is`%util` in iostat?)
+- https://coderwall.com/p/utc42q/understanding-iostat
+- https://www.percona.com/doc/percona-toolkit/LATEST/pt-diskstats.html
+
+Others:
+
+- https://serverfault.com/a/85481/121951 (about system memory statistics)
