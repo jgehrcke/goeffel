@@ -719,15 +719,15 @@ class SampleConsumerProcess(multiprocessing.Process):
 
         log.info('HDF5 file is larger than %s MB, rotate', HDF5_FILE_ROTATION_SIZE_MB)
 
-        # The current `HDF5_FILE_SERIES_INDEX` is the source of truth. The output
-        # file currently being written to does not contain this index in its file
-        # name (it's in the HDF5 meta data however). Now move that file so that
-        # the path contains this index, then increment the index by 1.
+        # The current `HDF5_FILE_SERIES_INDEX` is the source of truth. The
+        # output file currently being written to does not contain this index in
+        # its file name (it's in the HDF5 meta data however). Now move that file
+        # so that the path contains this index, then increment the index by 1.
         global HDF5_FILE_SERIES_INDEX
 
-        # Note(JP): automated file deletion further below relies on the index being
-        # *appended* with *4* dights, and it relies on a larger index meaning "more
-        # recent" data.
+        # Note(JP): automated file deletion further below relies on the index
+        # being *appended* with *4* dights, and it relies on a larger index
+        # meaning "more recent" data.
         new_path = OUTFILE_PATH_HDF5 + '.' + str(HDF5_FILE_SERIES_INDEX).zfill(4)
 
         if os.path.exists(new_path):
@@ -740,16 +740,17 @@ class SampleConsumerProcess(multiprocessing.Process):
         # If this fails the program crashes which is as of now desired behavior.
         os.rename(OUTFILE_PATH_HDF5, new_path)
 
-        # The next HDF5 file created by `_prepare_hdf5_file_if_not_yet_existing()`
-        # will contain the incremented value in its meta data.
+        # The next HDF5 file created by
+        # `_prepare_hdf5_file_if_not_yet_existing()` will contain the
+        # incremented value in its meta data.
         HDF5_FILE_SERIES_INDEX += 1
 
         log.info('Check if oldest file in series should be deleted')
         while self._hdf5_remove_oldest_file_if_required():
-            # Do this in a loop because otherwise the program can remove at most one
-            # file per file rotation cycle. While this is enough in almost all of
-            # the cases, it is not enough if one file deletion attempt fails as of
-            # a transient problem.
+            # Do this in a loop because otherwise the program can remove at most
+            # one file per file rotation cycle. While this is enough in almost
+            # all of the cases, it is not enough if one file deletion attempt
+            # fails as of a transient problem.
             log.info('Deleted a file, check again')
 
     def _hdf5_remove_oldest_file_if_required(self):
@@ -757,8 +758,8 @@ class SampleConsumerProcess(multiprocessing.Process):
 
         Return `None` if no file needed to be deleted.
         """
-        # If the collection of HDF5 files belonging to this series surpasses a size
-        # threshold then start deleting the oldest files (lowest index).
+        # If the collection of HDF5 files belonging to this series surpasses a
+        # size threshold then start deleting the oldest files (lowest index).
         hdf5_files_dir_path = os.path.dirname(os.path.abspath(OUTFILE_PATH_HDF5))
         hdf5_outfile_basename = os.path.basename(OUTFILE_PATH_HDF5)
         filenames = [fn for fn in os.listdir(hdf5_files_dir_path) if \
@@ -812,10 +813,10 @@ class SampleConsumerProcess(multiprocessing.Process):
         log.info('Identified oldest file in series: %s', filepaths_sorted[0])
         log.info('Removing file: %s', filepaths_sorted[0])
         try:
-            # If this fails (for whichever reason) do not crash the program. Maybe
-            # the file was removed underneath us. Maybe there was a transient
-            # problem and removal succeeds upon next attempt. It's not worth
-            # crashing the data acquisition.
+            # If this fails (for whichever reason) do not crash the program.
+            # Maybe the file was removed underneath us. Maybe there was a
+            # transient problem and removal succeeds upon next attempt. It's not
+            # worth crashing the data acquisition.
             os.remove(filepaths_sorted[0])
             return True
         except Exception as e:
@@ -823,12 +824,12 @@ class SampleConsumerProcess(multiprocessing.Process):
 
     def _write_samples_hdf5_if_enabled(self, samples):
         """
-        For writing every sample go through the complete life cycle from open()ing
-        the HDF5 file to close()ing it, to minimize the risk for data corruption. As
-        of the complexity of the HDF5 file format this results in quite a number of
-        file accesses. If doing this once per ARGS.sampling_interval (seconds)
-        generates too much overhead a proper solution is to write more than one
-        sample (row) in one go.
+        For writing every sample go through the complete life cycle from
+        open()ing the HDF5 file to close()ing it, to minimize the risk for data
+        corruption. As of the complexity of the HDF5 file format this results in
+        quite a number of file accesses. If doing this once per
+        ARGS.sampling_interval (seconds) generates too much overhead a proper
+        solution is to write more than one sample (row) in one go.
         """
         if OUTFILE_PATH_HDF5 is None:
             # That is the signal to not write an HDF5 output file.
@@ -843,20 +844,20 @@ class SampleConsumerProcess(multiprocessing.Process):
             # Look up table based on well-known name.
             hdf5table = f.root.messer_timeseries
 
-            # The pytables way of doing things: "The row attribute of table points to
-            # the Row instance that will be used to write data rows into the table. We
-            # write data simply by assigning the Row instance the values for each row as
-            # if it were a dictionary (although it is actually an extension class),
-            # using the column names as keys".
+            # The pytables way of doing things: "The row attribute of table
+            # points to the Row instance that will be used to write data rows
+            # into the table. We write data simply by assigning the Row instance
+            # the values for each row as if it were a dictionary (although it is
+            # actually an extension class), using the column names as keys".
             for sample in samples:
                 for key, value in sample.items():
                     hdf5table.row[key] = value
                 hdf5table.row.append()
 
-            # Leaving the context means flushing the table I/O buffer, updating all
-            # meta data in the HDF file, and closing the file both logically from a
-            # HDF5 perspective, but also from the kernel's / file system's
-            # perspective.
+            # Leaving the context means flushing the table I/O buffer, updating
+            # all meta data in the HDF file, and closing the file both logically
+            # from a HDF5 perspective, but also from the kernel's / file
+            # system's perspective.
 
         log.info(
             'Updated HDF5 file: wrote %s sample(s) in %.5f s',
