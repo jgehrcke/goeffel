@@ -58,6 +58,22 @@ fundamental idea as Messer; it however does not have a clear separation of
 concerns between persisting the data to disk, performing the measurement itself,
 and plotting the data, making it too error-prone and not production-ready.
 
+
+## Usage
+
+### Hints and tricks
+
+#### Convert an HDF5 file to a CSV file
+
+I recommend de-serialize and re-serialize using
+[pandas](https://pandas.pydata.org/). Example one-liner:
+```
+python -c 'import sys; import pandas as pd; df = pd.read_hdf(sys.argv[1], key="messer_timeseries"); df.to_csv(sys.argv[2], index=False)' messer_20190718_213115.hdf5.0001 /tmp/hdf5-as-csv.csv
+```
+Note that this significantly inflates the file size (e.g., from 50 MiB to 300
+MiB).
+
+
 ## Notes
 
 - Messer tries to not asymmetrically hide measurement uncertainty. For example,
