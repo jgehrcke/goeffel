@@ -722,7 +722,7 @@ class SampleConsumerProcess(multiprocessing.Process):
             log.debug('Do not rotate HDF5 file: %s B < %s B', cursize, maxsize)
             return
 
-        log.info('HDF5 file is larger than %s MB, rotate', HDF5_FILE_ROTATION_SIZE_MiB)
+        log.info('HDF5 file approaches %s MiB, rotate', HDF5_FILE_ROTATION_SIZE_MiB)
 
         # The current `HDF5_FILE_SERIES_INDEX` is the source of truth. The
         # output file currently being written to does not contain this index in
