@@ -12,9 +12,6 @@
 
 ## File management
 
-- HDF5 file management:  build in a concept that allows for "running this
-  permanently" (update: done, at least the first attempt)
-
 - File management in general: prevent accidental concurrent write access.
   Example scenario: messer started twice with default args in the same second.
   File locking?
