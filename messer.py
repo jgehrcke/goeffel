@@ -901,12 +901,12 @@ class SampleConsumerProcess(multiprocessing.Process):
 
 class SampleGenerator:
     """
-    This class implements the monitor looking at a specific process
+    This class implements the monitor looking at a specific process.
     """
 
     def __init__(self, pid):
         """
-        This function is expected to raise `psutil.Error` (e.g. especially
+        This function is expected to raise `psutil.Error` (e.g.
         `psutil.NoSuchProcess`).
         """
         import psutil
@@ -931,7 +931,7 @@ class SampleGenerator:
         Generator for generating samples. Each sample is a collection of values
         associated with a timestamp.
 
-        This function is expected to raise `psutil.Error` (e.g. especially
+        This function is expected to raise `psutil.Error` (especially
         `psutil.NoSuchProcess`).
         """
 
