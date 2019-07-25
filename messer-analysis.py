@@ -803,7 +803,7 @@ def savefig(title):
 
     fpath_figure = fname + '.png'
     log.info('Writing PNG figure to %s', fpath_figure)
-    plt.savefig(fpath_figure, dpi=150)
+    plt.savefig(fpath_figure, dpi=200)
 
 
 def pretty_timedelta(timedelta):
