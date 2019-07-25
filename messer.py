@@ -138,7 +138,7 @@ HDF5_COMP_FILTER = tables.Filters(complevel=9, complib='zlib', fletcher32=True)
 # File rotation: rotate to the next HDF5 file if the current file in the series
 # surpasses this size (in MiB). As of the time of writing Messer accumulates
 # roughly(!) 10 MiB per day in an HDF5 file (with gzip compression).
-HDF5_FILE_ROTATION_SIZE_MiB = 20
+HDF5_FILE_ROTATION_SIZE_MiB = 30
 
 # File retention policy: delete the earliest HDF5 file(s) in the current series
 # of files if the total size of all files in the current series surpasses this
