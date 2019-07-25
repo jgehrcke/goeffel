@@ -138,12 +138,12 @@ HDF5_COMP_FILTER = tables.Filters(complevel=9, complib='zlib', fletcher32=True)
 # File rotation: rotate to the next HDF5 file if the current file in the series
 # surpasses this size (in MiB). As of the time of writing Messer accumulates
 # roughly(!) 10 MiB per day in an HDF5 file (with gzip compression).
-HDF5_FILE_ROTATION_SIZE_MB = 20
+HDF5_FILE_ROTATION_SIZE_MiB = 20
 
 # File retention policy: delete the earliest HDF5 file(s) in the current series
 # of files if the total size of all files in the current series surpasses this
 # size (in MiB).
-HDF5_SERIES_SIZE_MAX_MB = 500
+HDF5_SERIES_SIZE_MAX_MiB = 500
 
 # Accumulate so many samples in the sample consumer process before appending
 # them all at once to the current HDF5 file. Updating the HDF5 file is a costly
@@ -712,13 +712,17 @@ class SampleConsumerProcess(multiprocessing.Process):
             return
 
         cursize = os.path.getsize(OUTFILE_PATH_HDF5)
-        maxsize = 1024 * 1024 * HDF5_FILE_ROTATION_SIZE_MB
+
+        # Substract an epsilon (1000 bytes) so that the next write is likely to
+        # not exceed HDF5_FILE_ROTATION_SIZE_MiB (rotation cannot happen at
+        # precisely this value, but should happen _below_ and not _above_).
+        maxsize = 1024 * 1024 * HDF5_FILE_ROTATION_SIZE_MiB - 1000
 
         if cursize < maxsize:
             log.debug('Do not rotate HDF5 file: %s B < %s B', cursize, maxsize)
             return
 
-        log.info('HDF5 file is larger than %s MB, rotate', HDF5_FILE_ROTATION_SIZE_MB)
+        log.info('HDF5 file is larger than %s MB, rotate', HDF5_FILE_ROTATION_SIZE_MiB)
 
         # The current `HDF5_FILE_SERIES_INDEX` is the source of truth. The
         # output file currently being written to does not contain this index in
@@ -774,7 +778,7 @@ class SampleConsumerProcess(multiprocessing.Process):
             ', '.join(filenames)
         )
 
-        maxsize = 1024 * 1024 * HDF5_SERIES_SIZE_MAX_MB
+        maxsize = 1024 * 1024 * HDF5_SERIES_SIZE_MAX_MiB
         if accumulated_size_bytes < maxsize:
             log.info(
                 'Do not delete the oldest file in series: %s Bytes < %s Bytes',
