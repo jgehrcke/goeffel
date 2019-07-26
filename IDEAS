@@ -23,6 +23,10 @@
 
 - control log level with command line flag
 
+- make non-interactive mode default because of the figure size issue:
+  https://github.com/matplotlib/matplotlib/issues/7338
+  Write PDF and PNG by default.
+
 
 ## Ideas for walk-through / tutorial / blog:
 
@@ -33,6 +37,9 @@
 
 
 ## Misc notes
+
+- messer cmdline args: make first argument positional arg, and auto-detect
+  whether it's an integer (PID) or otherwise PID command (cleaner semantics)
 
 - build a mode without process-specific monitoring (no pid, no pid command)?
 
