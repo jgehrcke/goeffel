@@ -101,8 +101,6 @@ def main():
     log.debug('Import big packages')
     lazy_load_big_packages()
 
-    print(ARGS)
-
     if ARGS.command == 'magic':
         cmd_magic()
         sys.exit(0)
@@ -130,7 +128,7 @@ def parse_cmdline_args():
 
     description = textwrap.dedent(
     """
-    Process and plot one or multiple time series created with messer.
+    Process and plot one or multiple time series created with Messer.
     """)
 
     parser = argparse.ArgumentParser(
