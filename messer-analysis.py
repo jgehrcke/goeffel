@@ -127,9 +127,7 @@ def main():
 def parse_cmdline_args():
 
     description = textwrap.dedent(
-    """
-    Process and plot one or multiple time series created with Messer.
-    """)
+    'Process and plot one or multiple time series created with Messer')
 
     parser = argparse.ArgumentParser(
         description=description,
@@ -184,6 +182,11 @@ def parse_cmdline_args():
         '--metric',
         metavar='METRIC_NAME',
         action='append'
+    )
+
+    magicparser.add_argument(
+        '--interactive-plot',
+        action='store_true'
     )
 
     plotparser = subparsers.add_parser('plot', help='Plot data in a flexible manner')
@@ -322,7 +325,8 @@ def cmd_magic():
     # one-time operation (if that turns out to be required).
     _ = fig.canvas.mpl_connect('resize_event', custom_tight_layout_func)
 
-    plt.show()
+    if ARGS.interactive_plot:
+        plt.show()
 
 
 def plot_magic(dataframe, metadata):
@@ -842,10 +846,11 @@ def savefig(title):
     with open(fpath_cmd, 'w') as f:
         f.write(command)
 
-    fpath_figure = fname + '.png'
-    log.info('Writing PNG figure to %s', fpath_figure)
-    plt.savefig(fpath_figure, dpi=200)
+    log.info('Writing figure as PNG to %s', fname + '.png')
+    plt.savefig(fname + '.png', dpi=200)
 
+    log.info('Writing figure as PDF to %s', fname + '.pdf')
+    plt.savefig(fname + '.pdf')
 
 def pretty_timedelta(timedelta):
     seconds = int(timedelta.total_seconds())
