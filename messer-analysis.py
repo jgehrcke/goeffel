@@ -180,6 +180,12 @@ def parse_cmdline_args():
        help='Analyze only the last N rows of the data table.'
     )
 
+    magicparser.add_argument(
+        '--metric',
+        metavar='METRIC_NAME',
+        action='append'
+    )
+
     plotparser = subparsers.add_parser('plot', help='Plot data in a flexible manner')
     plotparser.add_argument(
         '--series',
@@ -332,6 +338,10 @@ def plot_magic(dataframe, metadata):
         'proc_disk_write_throughput_mibps',
         'system_loadavg1',
     ]
+
+    additional_metrics = list(ARGS.metric)
+    for m in additional_metrics:
+        columns_to_plot.append(m)
 
     # Note(JP): this is a quick workaround to populate properties required in
     # code path downstream.
