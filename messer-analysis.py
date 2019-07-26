@@ -357,6 +357,11 @@ def plot_magic(dataframe, metadata):
     # Defaults are 6.4x4.8 inches at 100 dpi, make canvas significantly larger
     # so that more details can be shown. But... vertically! :)
     # Make vertical size dependent on column count.
+    # Note: `show()` adjusts the figure size to the screen size. Which is
+    # undesired here. This is basically the same problem as discussed in
+    # https://github.com/matplotlib/matplotlib/issues/7338 -- scroll bars
+    # would be an appropriate solution. Interesting:
+    # https://stackoverflow.com/a/42624276
     figure_height_inches = 2.28 * column_count
 
     fig = plt.gcf()
