@@ -71,13 +71,13 @@ COLUMN_PLOT_CONFIGS = {
         'plot_title': 'foo',
         'rolling_wdw_width_seconds': 0
     },
-    'disk_{DEVNAME}_util_percent': {
-        'y_label': '{DEVNAME} util [%]',
+    'disk_DEVNAME_util_percent': {
+        'y_label': 'DEVNAME util [%]',
         'plot_title': 'foo',
         'rolling_wdw_width_seconds': 5
     },
-    'disk_{DEVNAME}_write_latency_ms': {
-         'y_label': '{DEVNAME} wl [ms]',
+    'disk_DEVNAME_write_latency_ms': {
+         'y_label': 'DEVNAME wl [ms]',
          'plot_title': 'foo',
          'rolling_wdw_width_seconds': 5
     },
@@ -429,13 +429,41 @@ def plot_magic(dataframe, metadata):
         maxtime_across_series + 0.03 * diff
     )
 
+    def _get_column_plot_config_for_colname(colname):
+
+        # Special treatment for disk metrics: Extract disk devname from metric
+        # name. Then get generic disk-related column plot settings, but inject
+        # the specific disk devname into text (such as labels).
+
+        if colname.startswith('disk_'):
+            m = re.match('disk_(?P<devname>.*?)_.*', colname)
+            disk_devname = m.group('devname')
+            # Build generic column name from specific column name
+            # so that the subsequent dict lookup succeeds.
+            colname = colname.replace(disk_devname, 'DEVNAME')
+
+        # Create copy because of the disk-related modification below.
+        column_plot_config = COLUMN_PLOT_CONFIGS[colname].copy()
+
+        # Now, when these are disk metric plot settings then do some text
+        # processing: insert specific disk device name.
+        if colname.startswith('disk_'):
+            for k, v in column_plot_config.items():
+                if isinstance(v, str):
+                    log.info('replace')
+                    newvalue = v.replace('DEVNAME' , disk_devname)
+                    column_plot_config[k] = newvalue
+
+        return column_plot_config
+
     # Plot individual subplots.
-    for idx, column_name in enumerate(columns_to_plot, 1):
-        series = dataframe[column_name]
+    for idx, colname in enumerate(columns_to_plot, 1):
+        series = dataframe[colname]
 
         # Column-specific plot config such as y label, largely depends on the
         # metric itself.
-        column_plot_config = COLUMN_PLOT_CONFIGS[column_name]
+        column_plot_config = _get_column_plot_config_for_colname(colname)
+
 
         # Subplot-specific plot config, independent of the metric, mainly
         # dependent on the position of the subplot.
