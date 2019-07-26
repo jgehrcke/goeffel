@@ -35,7 +35,7 @@ from collections import Counter, OrderedDict
 from datetime import datetime, timedelta
 
 
-logfmt = "%(asctime)s.%(msecs)03d %(name)s %(levelname)s: %(message)s"
+logfmt = "%(asctime)s.%(msecs)03d %(levelname)s: %(message)s"
 datefmt = "%y%m%d-%H:%M:%S"
 logging.basicConfig(format=logfmt, datefmt=datefmt, level=logging.DEBUG)
 log = logging.getLogger()
