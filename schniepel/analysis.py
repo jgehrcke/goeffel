@@ -29,10 +29,8 @@ import os
 import math
 import re
 import sys
-import textwrap
 
-from collections import Counter, OrderedDict
-from datetime import datetime, timedelta
+from datetime import datetime
 
 
 logfmt = "%(asctime)s.%(msecs)03d %(levelname)s: %(message)s"
@@ -105,29 +103,33 @@ def main():
         cmd_magic()
         sys.exit(0)
 
-    dataframe_label_pairs = []
-    for filepath, series_label in ARGS.series:
-        dataframe_label_pairs.append(
-            (parse_datafile_into_dataframe(filepath), series_label)
-        )
+    raise NotImplementedError
 
-    # Translate each `--column ....` argument into a dictionary.
-    column_dicts = []
-    keys = ('column_name', 'y_label', 'plot_title', 'rolling_wdw_width_seconds')
-    for values in ARGS.column:
-        # TODO: add check that rolling_wdw_width_seconds is an integer.
-        column_dicts.append(dict(zip(keys, values)))
+    # What follows is super useful functionality but this should be properly
+    # abstracted in its own subcommand.
 
-    for column_dict in column_dicts:
-        plot_column_multiple_subplots(dataframe_label_pairs, column_dict)
+    # dataframe_label_pairs = []
+    # for filepath, series_label in ARGS.series:
+    #     dataframe_label_pairs.append(
+    #         (parse_datafile_into_dataframe(filepath), series_label)
+    #     )
 
-    plt.show()
+    # # Translate each `--column ....` argument into a dictionary.
+    # column_dicts = []
+    # keys = ('column_name', 'y_label', 'plot_title', 'rolling_wdw_width_seconds')
+    # for values in ARGS.column:
+    #     # TODO: add check that rolling_wdw_width_seconds is an integer.
+    #     column_dicts.append(dict(zip(keys, values)))
+
+    # for column_dict in column_dicts:
+    #     plot_column_multiple_subplots(dataframe_label_pairs, column_dict)
+
+    # plt.show()
 
 
 def parse_cmdline_args():
 
-    description = textwrap.dedent(
-    'Process and plot one or multiple time series created with Schniepel')
+    description = 'Process and plot one or multiple time series created with Schniepel'
 
     parser = argparse.ArgumentParser(
         description=description,
@@ -156,14 +158,20 @@ def parse_cmdline_args():
     # Allow only _one_ of the following four options.
     meg = magicparser.add_mutually_exclusive_group()
     meg.add_argument(
-       '--first',
-       metavar='TIME OFFSET STRING',
-       help='Analyze the first part of the time series data. Use pandas time offset string (such as 2D, meaning two days)'
+        '--first',
+        metavar='TIME OFFSET STRING',
+        help=(
+            'Analyze the first part of the time series data. '
+            'Use pandas time offset string (such as 2D, meaning two days).'
+        )
     )
     meg.add_argument(
-       '--last',
-       metavar='TIME OFFSET STRING',
-       help='Analyze the list part of the time series data. Use pandas time offset string (such as 2D, meaning two days)'
+        '--last',
+        metavar='TIME OFFSET STRING',
+        help=(
+            'Analyze the list part of the time series data. Use pandas '
+            'time offset string (such as 2D, meaning two days).'
+        )
     )
     meg.add_argument(
        '--head',
@@ -205,7 +213,10 @@ def parse_cmdline_args():
         metavar=('COLUMN_NAME', 'Y_LABEL', 'PLOT_TITLE', 'ROLLING_WINDOW_WIDTH_SECONDS'),
         action='append',
         required=True,
-        help='Every column is displayed in its own figure, potentially multiple sub plots from various columns'
+        help=(
+            'Every column is displayed in its own figure, potentially '
+            'multiple sub plots from various columns.'
+        )
     )
 
     plotparser.add_argument(
@@ -254,7 +265,7 @@ def inspect_data_file():
             f'  PID command: {table.attrs.schniepel_pid_command}\n'
             f'  PID: {table.attrs.schniepel_pid}\n'
             f'  Sampling interval: {table.attrs.schniepel_sampling_interval_seconds} s\n'
-            #f'  Schniepel schema version: {table.attrs.schniepel_schema_version}\n'
+            # f'  Schniepel schema version: {table.attrs.schniepel_schema_version}\n'
         )
 
         frlt = table[0]['isotime_local'].decode('ascii')
@@ -307,8 +318,8 @@ def cmd_magic():
 
     dataframe = parse_hdf5file_into_dataframe(
         ARGS.datafile_for_magicplot,
-        #startrow=ARGS.tail,
-        #stoprow=ARGS.head,
+        # startrow=ARGS.tail,
+        # stoprow=ARGS.head,
         first=ARGS.first,
         last=ARGS.last
     )
@@ -455,7 +466,7 @@ def plot_magic(dataframe, metadata):
             for k, v in column_plot_config.items():
                 if isinstance(v, str):
                     log.info('replace')
-                    newvalue = v.replace('DEVNAME' , disk_devname)
+                    newvalue = v.replace('DEVNAME', disk_devname)
                     column_plot_config[k] = newvalue
 
         return column_plot_config
@@ -468,24 +479,23 @@ def plot_magic(dataframe, metadata):
         # metric itself.
         column_plot_config = _get_column_plot_config_for_colname(colname)
 
-
         # Subplot-specific plot config, independent of the metric, mainly
         # dependent on the position of the subplot.
         subplotsettings = {}
-        subplotsettings['show_y_label'] =  True
+        subplotsettings['show_y_label'] = True
 
         # Plot y axis label only at central subplot.
-        #plotsettings['show_y_label'] = \
+        # plotsettings['show_y_label'] = \
         #    True if idx == math.ceil(dataframe_count/2) else False
 
         # Show legend only in first row (by default, can be modified)
-        #plotsettings['show_legend'] = True #  if idx == ARGS.show_legend_in_plot else False
-        subplotsettings['show_legend'] = True  if idx == 1 else False
+        # plotsettings['show_legend'] = True #  if idx == ARGS.show_legend_in_plot else False
+        subplotsettings['show_legend'] = True if idx == 1 else False
         subplotsettings['series_label'] = ''
 
         subplotsettings['xlim'] = common_x_limit
 
-        #if common_y_limit is not None:
+        # if common_y_limit is not None:
         #    plotsettings['ylim'] = common_y_limit
 
         plot_subplot(axs[idx-1], column_plot_config, series, subplotsettings)
@@ -496,14 +506,13 @@ def plot_magic(dataframe, metadata):
 
     # Note that `tight_layout` does not consider `fig.suptitle()`. Also see
     # https://stackoverflow.com/a/45161551/145400
-    #plt.subplots_adjust(
+    # plt.subplots_adjust(
     #    hspace=0.05 left=0.05, right=0.97, bottom=0.1, top=0.95)
-    #plt.tight_layout()
+    # plt.tight_layout()
 
     # Note that subplots_adjust must be called after any calls to tight_layout,
     # or there will be no effect of calling subplots_adjust. Also see
     # https://stackoverflow.com/a/8248506/145400
-
 
     def custom_tight_layout_func(event=None):
         """This function can be called as a callback in response to matplotlib
@@ -515,7 +524,7 @@ def plot_magic(dataframe, metadata):
 
     custom_tight_layout_func()
 
-    #plt.tight_layout()
+    # plt.tight_layout()
 
     savefig(f'schniepel_magicplot_{metadata.system_hostname}_{metadata.invocation_time_local}')
 
@@ -574,12 +583,12 @@ def plot_column_multiple_subplots(dataframe_label_pairs, column_dict):
     if ARGS.samescale:
 
         maxval_across_series = max(
-            df[column_dict['column_name']].max() for df, _ in \
+            df[column_dict['column_name']].max() for df, _ in
             dataframe_label_pairs
         )
 
         minval_across_series = min(
-            df[column_dict['column_name']].min() for df, _ in \
+            df[column_dict['column_name']].min() for df, _ in
             dataframe_label_pairs
         )
 
@@ -631,7 +640,7 @@ def plot_column_multiple_subplots(dataframe_label_pairs, column_dict):
     # fraction of the average axis height
     plt.subplots_adjust(
         hspace=0.05, left=0.05, right=0.97, bottom=0.1, top=0.95)
-    #plt.tight_layout()
+    # plt.tight_layout()
     savefig(column_dict['plot_title'])
 
 
@@ -668,7 +677,7 @@ def plot_subplot(ax, column_plot_config, series, plotsettings):
             window='%ss' % window_width_seconds
         )
 
-        #rolling_window_mean = rollingwindow.sum() / float(window_width_seconds)
+        # rolling_window_mean = rollingwindow.sum() / float(window_width_seconds)
         rolling_window_mean = rollingwindow.mean()
 
         # In the resulting Series object, the request rate value is assigned to
@@ -687,12 +696,12 @@ def plot_subplot(ax, column_plot_config, series, plotsettings):
         rolling_window_mean.index = rolling_window_mean.index - offset
 
         rolling_window_mean.plot(
-            #linestyle='solid',
+            # linestyle='solid',
             linestyle='None',
             color='black',
             marker='.',
             markersize=1,
-            #markeredgecolor='gray'
+            # markeredgecolor='gray'
             )
 
     if 'yscale' in column_plot_config:
@@ -788,8 +797,8 @@ def parse_hdf5file_into_dataframe(
     df = pd.read_hdf(
         filepath,
         key='schniepel_timeseries',
-        #start=startrow,
-        #stop=stoprow,
+        # start=startrow,
+        # stop=stoprow,
     )
 
     # Parse Unix timestamps into a `pandas.DateTimeIndex` object and replace the
@@ -851,6 +860,7 @@ def savefig(title):
 
     log.info('Writing figure as PDF to %s', fname + '.pdf')
     plt.savefig(fname + '.pdf')
+
 
 def pretty_timedelta(timedelta):
     seconds = int(timedelta.total_seconds())
