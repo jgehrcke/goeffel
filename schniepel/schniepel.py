@@ -123,7 +123,7 @@ from datetime import datetime
 import tables
 
 
-__version__ = "1.0.0"
+__version__ = "0.1.0"
 
 
 # If the program is invoked with a PID command and the process goes away then

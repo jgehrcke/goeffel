@@ -19,7 +19,7 @@ setup(
     entry_points = {
         'console_scripts': [
             'schniepel = schniepel.schniepel:main',
-            'schniepel-analysis = schniepel.schniepel_analysis:main'
+            'schniepel-analysis = schniepel.analysis:main'
             ]
         },
     version = version,
