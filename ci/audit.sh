@@ -5,9 +5,8 @@ python setup.py check
 #python setup.py --long-description | rst2html.py > /dev/null
 #rst2html.py CHANGELOG.rst > /dev/null
 
-# Run flake8 on the gipc directory (do not yet
-# run on examples and test code).
-flake8 schniepel/
+# Run flake8 on all the Python files it discovers.
+flake8
 
 # The pylint result is not to be interpreted in a binary fashion.
 # pylint --reports=n --disable=C0103,W0212,W0511,W0142,R0903 gipc/gipc.py

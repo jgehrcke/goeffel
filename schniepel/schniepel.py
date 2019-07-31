@@ -169,10 +169,20 @@ def sampleloop(sampleq, consumer_process):
             away.
         """
         sg = SampleGenerator(pid)
-        for sample in sg.generate_indefinitely():
+        for n, sample in enumerate(sg.generate_indefinitely(), 1):
+            # Note(JP): should this check be done upon every iteration?
+            # Probably involves "just" the wait() syscall, but still...
             if not consumer_process.is_alive():
                 sys.exit('The sample consumer process is gone. Exit.')
+
             sampleq.put(sample)
+
+            # This exit criterion is useful for testing, but also for
+            # unsupervised finite monitoring.
+            if ARGS.terminate_after_n_samples:
+                if n == ARGS.terminate_after_n_samples:
+                    log.info('Terminate (acquired %s samples).', n)
+                    sys.exit(0)
 
     # Handle case where a specific (constant) PID was provided on the command
     # line. Error out and exit program in the moment the PID cannot be monitored
@@ -308,6 +318,13 @@ def process_cmdline_args():
         metavar='DEVNAME',
         help='Measure disk I/O statistics for device DEVNAME.'
     )
+
+    parser.add_argument(
+        '--terminate-after-n-samples',
+        metavar='N',
+        type=int,
+        help='Quit program after acquiring N samples.'
+        )
 
     # TODO: make it so that at least one output file method is defined.
     # maybe: require HDF5 to work.
@@ -584,6 +601,11 @@ class SampleConsumerProcess(multiprocessing.Process):
             # process in case of `None`.
             if sample is None:
                 log.debug('Sample consumer process: shutting down')
+
+                # Flush out samples that are in the buffer.
+                if hdf5_sample_buffer:
+                    self._write_samples_hdf5_if_enabled(hdf5_sample_buffer)
+
                 break
 
             # Simulate I/O slowness.
