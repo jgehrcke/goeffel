@@ -1,0 +1,24 @@
+# Instruct Travis to build PRs as well as merges to master.
+# See https://stackoverflow.com/a/31882307/145400.
+branches:
+  only:
+    - master
+
+
+language: python
+
+
+matrix:
+  include:
+    - os: linux
+      python: 3.6
+
+
+install:
+  - source ./ci/prepare-ci-env.sh
+
+
+script:
+    - python --version && uname -a
+    - pip list
+    - bash ci/audit.sh

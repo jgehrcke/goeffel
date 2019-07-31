@@ -40,69 +40,6 @@ the utilization of system-wide resources making it straightforward to put the
 process-specific metrics into context.
 
 This program has been written for and tested on CPython 3.5 and 3.6 on Linux.
-
-"""
-
-"""
-This was born out of a need for solid tooling. We started with pidstat from
-sysstat, launched in the following manner:
-
- pidstat -hud -p $PID 1 1
-
-We found that it does not properly account for multiple threads running in the
-same process, and that various issues in that regard exist in this program
-across various versions. Related references:
-
- - https://github.com/sysstat/sysstat/issues/73#issuecomment-349946051
- - https://github.com/sysstat/sysstat/commit/52977c479
- - https://github.com/sysstat/sysstat/commit/a63e87996
-
-The program cpustat open-sourced by Uber
-(https://github.com/uber-common/cpustat) has a promising README about the
-general measurement methodology, and overall seems to be a great tool for our
-purposes but the methodology around persisting the collected timeseries data is
-undocumented. It seems to write some binary file when using `-cpuprofile` but it
-is a little unclear what this file contains.
-
-The program psrecord (https://github.com/astrofrog/psrecord) which effectively
-wraps psutil has the same fundamental idea as this code here; it however does
-not have a clear separation of concerns in the code between persisting the data
-to disk, performing the measurements themselves, and plotting the data,
-rendering it not production-ready for our concerns.
-
-References:
-
-https://github.com/Leo-G/DevopsWiki/wiki/How-Linux-CPU-Usage-Time-and-Percentage-is-calculated
-http://www.brendangregg.com/usemethod.html
-https://github.com/uber-common/cpustat
-
-References for interpreting output:
-
-  Disk I/O statistics:
-
-    - https://unix.stackexchange.com/a/462732 (What are merged writes?)
-    - https://www.xaprb.com/blog/2010/01/09/how-linux-iostat-computes-its-results/
-    - https://blog.serverfault.com/2010/07/06/777852755/ (interpreting iostat output)
-    - https://stackoverflow.com/a/8512978 (what is %util in iostat?)
-    - https://coderwall.com/p/utc42q/understanding-iostat
-    - https://www.percona.com/doc/percona-toolkit/LATEST/pt-diskstats.html
-
-  System memory statistics:
-
-    - https://serverfault.com/a/85481/121951
-
-  Notes about HDF5:
-
-    - For writing the HDF5 file we could use pandas' pd.HDFStore implementation.
-      However, already requiring pytables for measurement is a pretty big
-      dependency to meet, and I am trying to get away w/o pandas in the
-      measurement system itself.
-
-    - https://cyrille.rossant.net/moving-away-hdf5/
-    - http://hdf-forum.184993.n3.nabble.com/File-corruption-and-hdf5-design-considerations-td4025305.html
-    - https://pytables-users.narkive.com/QH2WlyqN/corrupt-hdf5-files
-    - https://www.hdfgroup.org/2015/05/whats-coming-in-the-hdf5-1-10-0-release/
-    - https://stackoverflow.com/q/35837243/145400
 """
 
 import argparse
@@ -282,7 +219,7 @@ class HDF5Schema:
 
     def __init__(self):
 
-        self.schema_dict =  {
+        self.schema_dict = {
             # Store time in two formats: for flexible analysis store a 64 bit
             # unix timestamp (subsecond precision). For convenience, also store
             # a text representation of the local time (also with subsecond
@@ -379,7 +316,10 @@ def process_cmdline_args():
         '--hdf5-path-prefix',
         metavar='PATH_PREFIX',
         default='./schniepel_timeseries_',
-        help='Change the default HDF5 file path prefix. Suffix contains invocation time and file extension.'
+        help=(
+            'Change the default HDF5 file path prefix. Suffix contains '
+            'invocation time and file extension.'
+        )
     )
     parser.add_argument(
         '--outfile-hdf5-path',
@@ -404,7 +344,10 @@ def process_cmdline_args():
         '--csv-path-prefix',
         metavar='PATH_PREFIX',
         default='./schniepel_timeseries_',
-        help='Change the default CSV file path prefix. Suffix contains invocation time and file extension.'
+        help=(
+            'Change the default CSV file path prefix. Suffix contains '
+            'invocation time and file extension.'
+        )
     )
     parser.add_argument(
         '--outfile-csv-path',
@@ -417,7 +360,10 @@ def process_cmdline_args():
         '--no-system-metrics',
         action='store_true',
         default=False,
-        help='Do not record system-global metrics (for a small reduction of the output data rate).'
+        help=(
+            'Do not record system-global metrics (for a small reduction of '
+            'the output data rate).'
+        )
     )
 
     parser.add_argument(
@@ -552,7 +498,7 @@ def _process_cmdline_args_advanced():
     # Add system-wide metrics to the schema if not instructed otherwise.
     if not ARGS.no_system_metrics:
 
-        for cn in ('system_loadavg1', 'system_loadavg5','system_loadavg15'):
+        for cn in ('system_loadavg1', 'system_loadavg5', 'system_loadavg15'):
             HDF5_SCHEMA.add_column(colname=cn, coltype=tables.Float16Col)
 
         for cn in (
@@ -579,6 +525,12 @@ def _disk_dev_name_to_metric_name(devname):
 
 
 class SampleConsumerProcess(multiprocessing.Process):
+    """
+    For writing the HDF5 file we could use pandas' pd.HDFStore implementation.
+    However, already requiring pytables for measurement is a pretty big
+    dependency to meet, and I am trying to get away w/o pandas in the
+    measurement system itself.
+    """
 
     def __init__(self, queue):
         super().__init__()
@@ -640,7 +592,7 @@ class SampleConsumerProcess(multiprocessing.Process):
 
             self._write_sample_csv_if_enabled(sample)
 
-            # Write N samples to disk together (it iss fine to potentially lose
+            # Write N samples to disk together (it is fine to potentially lose
             # a couple of seconds of time series data). Also write very first
             # sample immediately so that writing the HDF5 file fails fast (if it
             # fails, instead of failing only after collecting the first N
@@ -772,7 +724,8 @@ class SampleConsumerProcess(multiprocessing.Process):
         # size threshold then start deleting the oldest files (lowest index).
         hdf5_files_dir_path = os.path.dirname(os.path.abspath(OUTFILE_PATH_HDF5))
         hdf5_outfile_basename = os.path.basename(OUTFILE_PATH_HDF5)
-        filenames = [fn for fn in os.listdir(hdf5_files_dir_path) if \
+        filenames = [
+            fn for fn in os.listdir(hdf5_files_dir_path) if
             fn.startswith(hdf5_outfile_basename)
         ]
         filepaths = [os.path.join(hdf5_files_dir_path, fn) for fn in filenames]
@@ -806,8 +759,8 @@ class SampleConsumerProcess(multiprocessing.Process):
         # >>> re.match('^.*\.[0-9]{4}$', 'foo.00001')
         # >>>
         filenames_with_series_index = [
-            fp for fp in filenames if \
-            re.match('^.*\.[0-9]{4}$', fp) is not None
+            fp for fp in filenames if
+            re.match(r'^.*\.[0-9]{4}$', fp) is not None
         ]
 
         # Rely on `sorted` to sort as desired, ascendingly:
@@ -815,7 +768,7 @@ class SampleConsumerProcess(multiprocessing.Process):
         # ['foo-0002', 'foo-0003', 'foo-0004', 'foo-0005']
         filenames_with_series_index_sorted = sorted(filenames_with_series_index)
         filepaths_sorted = [
-            os.path.join(hdf5_files_dir_path, fn) for \
+            os.path.join(hdf5_files_dir_path, fn) for
             fn in filenames_with_series_index_sorted
         ]
 
@@ -951,7 +904,6 @@ class SampleGenerator:
         # Prepare process analysis. This does not yet look at process metrics,
         # but already errors out when the PID is unknown.
 
-
         # `t_rel1` is the reference timestamp for differential analysis where a
         # time difference is in the denominator of a calculation:
         #
@@ -996,7 +948,9 @@ class SampleGenerator:
             # is absolutely tolerable.
             #
             # `psutil.disk_io_counters()` is similarly fast on my test machine
-            # >>> timeit('psutil.disk_io_counters(perdisk=True)', number=100, globals=globals()) / 100
+            # timeit(
+            #       'psutil.disk_io_counters(perdisk=True)',
+            #        number=100, globals=globals()) / 100
             # 0.0002499251801054925
             #
             # Do not do this by default though because on systems with a complex
@@ -1076,14 +1030,16 @@ class SampleGenerator:
             # default plots with bytes per second are hard to interpret.
             # However, in other scenarios others might think that bps are
             # better/more flexible. No perfect solution.
-            proc_disk_read_throughput_mibps = (proc_io2.read_chars - proc_io1.read_chars) / 1048576.0 / delta_t
-            proc_disk_write_throughput_mibps = (proc_io2.write_chars - proc_io1.write_chars) / 1048576.0 / delta_t
+            proc_disk_read_throughput_mibps = \
+                (proc_io2.read_chars - proc_io1.read_chars) / 1048576.0 / delta_t
+            proc_disk_write_throughput_mibps = \
+                (proc_io2.write_chars - proc_io1.write_chars) / 1048576.0 / delta_t
             proc_disk_read_rate_hz = (proc_io2.read_count - proc_io1.read_count) / delta_t
             proc_disk_write_rate_hz = (proc_io2.write_count - proc_io1.write_count) / delta_t
 
             proc_ctx_switch_rate_hz = \
                 (
-                    (num_ctx_switches2.voluntary - num_ctx_switches1.voluntary) + \
+                    (num_ctx_switches2.voluntary - num_ctx_switches1.voluntary) +
                     (num_ctx_switches2.involuntary - num_ctx_switches1.involuntary)
                 ) / delta_t
 
@@ -1132,7 +1088,6 @@ class SampleGenerator:
             # For differential values, store 'new values' as 'old values' for
             # next iteration.
             procstats1 = procstats2
-            #cputimes1 = cputimes2
             diskstats1 = diskstats2
             t_rel1 = t_rel2
 
@@ -1228,7 +1183,7 @@ class SampleGenerator:
             # request rate, is the _merged_ read or write request rate (the
             # kernel attempts to merge individual user space requests before
             # passing them to the hardware). For non-random I/O patterns this
-            # greatly reduces the of individual reads and writes issed to disk.
+            # greatly reduces the of individual reads and writes issued to disk.
             sampledict['disk_' + mdev + '_merged_write_rate_hz'] = \
                 (s2[dev].write_merged_count - s1[dev].write_merged_count) / delta_t
             sampledict['disk_' + mdev + '_merged_read_rate_hz'] = \
@@ -1298,7 +1253,3 @@ def pid_from_cmd(pid_command):
     log.info('New process ID from PID command: %s', pid)
 
     return pid
-
-
-#if __name__ == "__main__":
-#    main()
