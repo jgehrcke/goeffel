@@ -60,3 +60,6 @@
 
     - maybe emit monotonic time source into its own column, so that system
       clock drift can be measured / excluded
+
+- Allow for installing `schiepel` w/o the depdencies required solely for
+  `schniepel-analysis`.
