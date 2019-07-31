@@ -123,6 +123,9 @@ from datetime import datetime
 import tables
 
 
+__version__ = "1.0.0"
+
+
 # If the program is invoked with a PID command and the process goes away then
 # the PID command is invoked periodically for polling for a new PID. This
 # constant determines the polling interval.
@@ -1297,5 +1300,5 @@ def pid_from_cmd(pid_command):
     return pid
 
 
-if __name__ == "__main__":
-    main()
+#if __name__ == "__main__":
+#    main()
