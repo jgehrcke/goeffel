@@ -56,6 +56,6 @@ def testprocess():
 
 def test_a_number_of_features(clitest, testprocess):
     clitest.run(
-       f"schniepel --pid-command 'echo {testprocess.pid}' "
+        f"schniepel --pid-command 'echo {testprocess.pid}' "
         "--diskstats sda --sampling-interval 0.3 --terminate-after-n-samples 1"
     )
