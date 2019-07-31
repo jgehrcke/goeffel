@@ -49,3 +49,7 @@
 
 - architecture: if the sample writer crashes for whichever reason we want to
   crash the entire program, right?
+
+- sampling loop timekeeping: use deadline-based approach with a periodic poll
+  to minimize a systematic error dominating the sample time stamps
+  (sample interval + sample duration).
