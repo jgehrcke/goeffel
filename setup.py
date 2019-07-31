@@ -25,8 +25,10 @@ setup(
     version=version,
     description='Measures the resource utilization of a specific process over time',
     long_description=long_descr,
+    long_description_content_type='text/markdown',
     author='Dr. Jan-Philip Gehrcke',
     author_email='jgehrcke@googlemail.com',
+    url='https://github.com/jgehrcke/schniepel',
     classifiers=[
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python',
