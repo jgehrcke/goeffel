@@ -13,3 +13,7 @@ flake8
 
 # Build documentation.
 #cd docs && make html
+
+# See if this would be good to release.
+python setup.py sdist
+twine check dist/*
