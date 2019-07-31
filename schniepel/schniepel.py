@@ -123,20 +123,23 @@ from datetime import datetime
 import tables
 
 
+__version__ = "0.1.0"
+
+
 # If the program is invoked with a PID command and the process goes away then
 # the PID command is invoked periodically for polling for a new PID. This
 # constant determines the polling interval.
 PROCESS_PID_POLL_INTERVAL_SECONDS = 1.0
 
 # No strong use case so far. This value is added to the HDF5 file metadata.
-MESSER_SAMPLE_SCHEMA_VERSION = 1
+SCHNIEPEL_SAMPLE_SCHEMA_VERSION = 1
 
 # For choosing compression parameters, interoperability and reliability
 # (reducing risk for corruption) matters more than throughput.
 HDF5_COMP_FILTER = tables.Filters(complevel=9, complib='zlib', fletcher32=True)
 
 # File rotation: rotate to the next HDF5 file if the current file in the series
-# surpasses this size (in MiB). As of the time of writing Messer accumulates
+# surpasses this size (in MiB). As of the time of writing Schniepel accumulates
 # roughly(!) 10 MiB per day in an HDF5 file (with gzip compression).
 HDF5_FILE_ROTATION_SIZE_MiB = 30
 
@@ -375,7 +378,7 @@ def process_cmdline_args():
     parser.add_argument(
         '--hdf5-path-prefix',
         metavar='PATH_PREFIX',
-        default='./messer_timeseries_',
+        default='./schniepel_timeseries_',
         help='Change the default HDF5 file path prefix. Suffix contains invocation time and file extension.'
     )
     parser.add_argument(
@@ -400,7 +403,7 @@ def process_cmdline_args():
     parser.add_argument(
         '--csv-path-prefix',
         metavar='PATH_PREFIX',
-        default='./messer_timeseries_',
+        default='./schniepel_timeseries_',
         help='Change the default CSV file path prefix. Suffix contains invocation time and file extension.'
     )
     parser.add_argument(
@@ -674,26 +677,26 @@ class SampleConsumerProcess(multiprocessing.Process):
         hdf5file = tables.open_file(
             OUTFILE_PATH_HDF5,
             mode='w',
-            title='messer.py time series file, invocation at ' + INVOCATION_TIME_LOCAL_STRING,
+            title='Schniepel time series file, invocation at ' + INVOCATION_TIME_LOCAL_STRING,
             filters=HDF5_COMP_FILTER
         )
         hdf5table = hdf5file.create_table(
             where='/',
-            name='messer_timeseries',
+            name='schniepel_timeseries',
             description=HDF5_SCHEMA.schema_dict,
-            title='messer.py time series, invocation at ' + INVOCATION_TIME_LOCAL_STRING,
+            title='Schniepel time series, invocation at ' + INVOCATION_TIME_LOCAL_STRING,
         )
 
         # Use so-called HDF5 table user attributes for storing relevant metadata.
         hdf5table.attrs.invocation_time_unix = INVOCATION_TIME_UNIX_TIMESTAMP
         hdf5table.attrs.invocation_time_local = INVOCATION_TIME_LOCAL_STRING
         hdf5table.attrs.system_hostname = get_hostname()
-        hdf5table.attrs.messer_schema_version = MESSER_SAMPLE_SCHEMA_VERSION
+        hdf5table.attrs.schniepel_schema_version = SCHNIEPEL_SAMPLE_SCHEMA_VERSION
         # Store both, pid and pid command although we know only one is populated.
-        hdf5table.attrs.messer_pid_command = ARGS.pid_command
-        hdf5table.attrs.messer_pid = ARGS.pid
-        hdf5table.attrs.messer_sampling_interval_seconds = ARGS.sampling_interval
-        hdf5table.attrs.messer_file_series_index = HDF5_FILE_SERIES_INDEX
+        hdf5table.attrs.schniepel_pid_command = ARGS.pid_command
+        hdf5table.attrs.schniepel_pid = ARGS.pid
+        hdf5table.attrs.schniepel_sampling_interval_seconds = ARGS.sampling_interval
+        hdf5table.attrs.schniepel_file_series_index = HDF5_FILE_SERIES_INDEX
         hdf5file.close()
 
     def _prepare_csv_file_if_not_yet_existing(self):
@@ -703,10 +706,10 @@ class SampleConsumerProcess(multiprocessing.Process):
 
         log.info('Create CSV file: %s', OUTFILE_PATH_CSV)
         with open(OUTFILE_PATH_CSV, 'wb') as f:
-            f.write(b'# messer_timeseries\n')
+            f.write(b'# schniepel_timeseries\n')
             f.write(b'# %s\n' (INVOCATION_TIME_LOCAL_STRING, ))
             f.write(b'# system hostname: %s\n' (get_hostname(), ))
-            f.write(b'# schema version: %s\n' (MESSER_SAMPLE_SCHEMA_VERSION, ))
+            f.write(b'# schema version: %s\n' (SCHNIEPEL_SAMPLE_SCHEMA_VERSION, ))
 
     def _hdf5_file_rotate_if_required(self):
         # During the first iteration the file does not yet exist.
@@ -849,7 +852,7 @@ class SampleConsumerProcess(multiprocessing.Process):
 
         with tables.open_file(OUTFILE_PATH_HDF5, 'a', filters=HDF5_COMP_FILTER) as f:
             # Look up table based on well-known name.
-            hdf5table = f.root.messer_timeseries
+            hdf5table = f.root.schniepel_timeseries
 
             # The pytables way of doing things: "The row attribute of table
             # points to the Row instance that will be used to write data rows
@@ -1297,5 +1300,5 @@ def pid_from_cmd(pid_command):
     return pid
 
 
-if __name__ == "__main__":
-    main()
+#if __name__ == "__main__":
+#    main()
