@@ -15,4 +15,4 @@ exclude = .git
 
 # Despite of this rather relaxed line length limitation set here,
 # contributors are strongly encouraged to adhere to an 80 character limit.
-max-line-length = 95
+max-line-length = 100
