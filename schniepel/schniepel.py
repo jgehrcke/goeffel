@@ -181,7 +181,8 @@ def sampleloop(sampleq, consumer_process):
             # unsupervised finite monitoring.
             if ARGS.terminate_after_n_samples:
                 if n == ARGS.terminate_after_n_samples:
-                    sys.exit('Terminate (acquired %s samples).' % (n, ))
+                    log.info('Terminate (acquired %s samples).', n)
+                    sys.exit(0)
 
     # Handle case where a specific (constant) PID was provided on the command
     # line. Error out and exit program in the moment the PID cannot be monitored
