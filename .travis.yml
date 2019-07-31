@@ -22,3 +22,4 @@ script:
     - python --version && uname -a
     - pip list
     - bash ci/audit.sh
+    - pytest -vv test/
