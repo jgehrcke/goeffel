@@ -206,3 +206,11 @@ About disk I/O statistics:
 Others:
 
 - https://serverfault.com/a/85481/121951 (about system memory statistics)
+
+Musings about HDF5:
+
+- https://cyrille.rossant.net/moving-away-hdf5/
+- http://hdf-forum.184993.n3.nabble.com/File-corruption-and-hdf5-design-considerations-td4025305.html
+- https://pytables-users.narkive.com/QH2WlyqN/corrupt-hdf5-files
+- https://www.hdfgroup.org/2015/05/whats-coming-in-the-hdf5-1-10-0-release/
+- https://stackoverflow.com/q/35837243/145400
