@@ -11,5 +11,5 @@ pip install 'setuptools==41.0.1' --upgrade
 pip install .
 
 # Install test/CI dependencies.
-# pip install -r requirements-tests.txt
+pip install -r requirements-tests.txt
 
