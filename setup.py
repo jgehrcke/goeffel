@@ -27,6 +27,7 @@ setup(
     long_description=long_descr,
     author='Dr. Jan-Philip Gehrcke',
     author_email='jgehrcke@googlemail.com',
+    url='https://github.com/jgehrcke/schniepel',
     classifiers=[
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python',
