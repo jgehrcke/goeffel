@@ -20,7 +20,7 @@ import traceback
 
 # Make the same code base run with Python 2 and 3.
 if sys.version < '3':
-    text_type = unicode
+    text_type = unicode  # noqa F821
     binary_type = str
 else:
     text_type = str
@@ -118,12 +118,15 @@ class CmdlineInterfaceTest(object):
     preamble_lines = []
     shellargs = []
 
-    def __init__(self, name):
+    def __init__(self, name, rundir, preamble_lines=None):
+        if preamble_lines is not None:
+            self.preamble_lines = preamble_lines
+
         self.name = name
-        self.rundir = os.path.join(self.rundirtop, name)
-        self.shellscript_name = "runtest_%s%s" % (name, self.shellscript_ext)
-        errfilename = "runtest_%s.err" % (name)
-        outfilename = "runtest_%s.out" % (name)
+        self.rundir = rundir
+        self.shellscript_name = "test_%s" % (self.shellscript_ext, )
+        errfilename = "runtest.err"
+        outfilename = "runtest.out"
         self.errfilepath = os.path.join(self.rundir, errfilename)
         self.outfilepath = os.path.join(self.rundir, outfilename)
         self._clear_create_rundir()
@@ -185,14 +188,16 @@ class CmdlineInterfaceTest(object):
         try:
             sp = subprocess.Popen(
                 cmd, stdout=of, stderr=ef, stdin=None, cwd=self.rundir)
-            #sp.stdin.write(stdin)
-            #sp.stdin.close()
+            # sp.stdin.write(stdin)
+            # sp.stdin.close()
             sp.wait()
             rc = sp.returncode
             log.info("Test returncode: %s", rc)
-        except:
-            log.error("Error running test subprocess. Traceback:\n%s",
-                traceback.format_exc())
+        except Exception:
+            log.error(
+                "Error running test subprocess. Traceback:\n%s",
+                traceback.format_exc()
+            )
             raise CmdlineTestError("Error during attempt to run child.")
         finally:
             of.close()
@@ -399,5 +404,7 @@ def _list_string_type(o):
     t = ts[0]
     if t == binary_type or t == text_type:
         return t, o
-    raise Exception(("Invalid %r: must be a string (byte or unicode) or a list "
-        "of strings (of the same type)." % o))
+    raise Exception(
+        "Invalid %r: must be a string (byte or unicode) or a list "
+        "of strings (of the same type)." % (o, )
+    )
