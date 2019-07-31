@@ -127,7 +127,7 @@ def main():
 def parse_cmdline_args():
 
     description = textwrap.dedent(
-    'Process and plot one or multiple time series created with Messer')
+    'Process and plot one or multiple time series created with Schniepel')
 
     parser = argparse.ArgumentParser(
         description=description,
@@ -144,14 +144,14 @@ def parse_cmdline_args():
     isparser.add_argument(
         'inspect_inputfile',
         metavar='PATH',
-        help='Path to Messer data file.',
+        help='Path to Schniepel data file.',
     )
 
     magicparser = subparsers.add_parser('magic', help='Magic ;]')
     magicparser.add_argument(
         'datafile_for_magicplot',
         metavar='PATH',
-        help='Messer data file containing process and system metrics.'
+        help='Schniepel data file containing process and system metrics.'
     )
     # Allow only _one_ of the following four options.
     meg = magicparser.add_mutually_exclusive_group()
@@ -210,7 +210,7 @@ def parse_cmdline_args():
 
     plotparser.add_argument(
         '--subtitle',
-        default='Default subtitle -- measured with messer.py',
+        default='Default subtitle -- measured with Schniepel',
         help='Set plot subtitle'
     )
     plotparser.add_argument('--samescale', action='store_true', default=True)
@@ -241,20 +241,20 @@ def inspect_data_file():
 
     with tables.open_file(ARGS.inspect_inputfile, 'r') as hdf5file:
         try:
-            table = hdf5file.root.messer_timeseries
+            table = hdf5file.root.schniepel_timeseries
         except tables.exceptions.NoSuchNodeError:
             log.info('HDF5 file details:\n%s', hdf5file)
-            log.error('Could not find /messer_timeseries object. Exit.')
+            log.error('Could not find /schniepel_timeseries object. Exit.')
             sys.exit(1)
 
         print(
             f'Measurement meta data:\n'
             f'  System hostname: {table.attrs.system_hostname}\n'
             f'  Invocation time (local): {table.attrs.invocation_time_local}\n'
-            f'  PID command: {table.attrs.messer_pid_command}\n'
-            f'  PID: {table.attrs.messer_pid}\n'
-            f'  Sampling interval: {table.attrs.messer_sampling_interval_seconds} s\n'
-            #f'  Messer schema version: {table.attrs.messer_schema_version}\n'
+            f'  PID command: {table.attrs.schniepel_pid_command}\n'
+            f'  PID: {table.attrs.schniepel_pid}\n'
+            f'  Sampling interval: {table.attrs.schniepel_sampling_interval_seconds} s\n'
+            #f'  Schniepel schema version: {table.attrs.schniepel_schema_version}\n'
         )
 
         frlt = table[0]['isotime_local'].decode('ascii')
@@ -300,7 +300,7 @@ def cmd_magic():
         import tables
         # Rely on this being a valid HDF5 file.
         with tables.open_file(ARGS.datafile_for_magicplot, 'r') as hdf5file:
-            table = hdf5file.root.messer_timeseries
+            table = hdf5file.root.schniepel_timeseries
             table_metadata = copy.copy(table.attrs)
 
         return table_metadata
@@ -373,7 +373,7 @@ def plot_magic(dataframe, metadata):
 
     fig.text(
         0.5, 0.985,
-        f'Messer time series ({metadata.invocation_time_local})',
+        f'Schniepel time series ({metadata.invocation_time_local})',
         verticalalignment='center',
         horizontalalignment='center',
         fontsize=13
@@ -381,7 +381,7 @@ def plot_magic(dataframe, metadata):
 
     fig.text(
         0.5, 0.970,
-        f'hostname: {metadata.system_hostname}, PID command: {metadata.messer_pid_command}',
+        f'hostname: {metadata.system_hostname}, PID command: {metadata.schniepel_pid_command}',
         verticalalignment='center',
         horizontalalignment='center',
         fontsize=10,
@@ -517,7 +517,7 @@ def plot_magic(dataframe, metadata):
 
     #plt.tight_layout()
 
-    savefig(f'messer_magicplot_{metadata.system_hostname}_{metadata.invocation_time_local}')
+    savefig(f'schniepel_magicplot_{metadata.system_hostname}_{metadata.invocation_time_local}')
 
     # Return matplotlib figure object for further processing for interactive
     # mode.
@@ -787,7 +787,7 @@ def parse_hdf5file_into_dataframe(
     # becomes meaningful for O(GB)-sized (compressed) HDF5 files.
     df = pd.read_hdf(
         filepath,
-        key='messer_timeseries',
+        key='schniepel_timeseries',
         #start=startrow,
         #stop=stoprow,
     )
