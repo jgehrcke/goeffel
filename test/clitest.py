@@ -124,7 +124,7 @@ class CmdlineInterfaceTest(object):
 
         self.name = name
         self.rundir = rundir
-        self.shellscript_name = "test_%s" % (self.shellscript_ext, )
+        self.shellscript_name = "test%s" % (self.shellscript_ext, )
         errfilename = "runtest.err"
         outfilename = "runtest.out"
         self.errfilepath = os.path.join(self.rundir, errfilename)
