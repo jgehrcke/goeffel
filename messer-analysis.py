@@ -35,7 +35,7 @@ from collections import Counter, OrderedDict
 from datetime import datetime, timedelta
 
 
-logfmt = "%(asctime)s.%(msecs)03d %(name)s %(levelname)s: %(message)s"
+logfmt = "%(asctime)s.%(msecs)03d %(levelname)s: %(message)s"
 datefmt = "%y%m%d-%H:%M:%S"
 logging.basicConfig(format=logfmt, datefmt=datefmt, level=logging.DEBUG)
 log = logging.getLogger()
@@ -71,13 +71,13 @@ COLUMN_PLOT_CONFIGS = {
         'plot_title': 'foo',
         'rolling_wdw_width_seconds': 0
     },
-    'disk_{DEVNAME}_util_percent': {
-        'y_label': '{DEVNAME} util [%]',
+    'disk_DEVNAME_util_percent': {
+        'y_label': 'DEVNAME util [%]',
         'plot_title': 'foo',
         'rolling_wdw_width_seconds': 5
     },
-    'disk_{DEVNAME}_write_latency_ms': {
-         'y_label': '{DEVNAME} wl [ms]',
+    'disk_DEVNAME_write_latency_ms': {
+         'y_label': 'DEVNAME wl [ms]',
          'plot_title': 'foo',
          'rolling_wdw_width_seconds': 5
     },
@@ -100,8 +100,6 @@ def main():
     # Importing matplotlib is slow. Defer until it known that it is needed.
     log.debug('Import big packages')
     lazy_load_big_packages()
-
-    print(ARGS)
 
     if ARGS.command == 'magic':
         cmd_magic()
@@ -129,9 +127,7 @@ def main():
 def parse_cmdline_args():
 
     description = textwrap.dedent(
-    """
-    Process and plot one or multiple time series created with messer.
-    """)
+    'Process and plot one or multiple time series created with Messer')
 
     parser = argparse.ArgumentParser(
         description=description,
@@ -180,6 +176,17 @@ def parse_cmdline_args():
        metavar='N',
        type=int,
        help='Analyze only the last N rows of the data table.'
+    )
+
+    magicparser.add_argument(
+        '--metric',
+        metavar='METRIC_NAME',
+        action='append'
+    )
+
+    magicparser.add_argument(
+        '--interactive-plot',
+        action='store_true'
     )
 
     plotparser = subparsers.add_parser('plot', help='Plot data in a flexible manner')
@@ -318,7 +325,8 @@ def cmd_magic():
     # one-time operation (if that turns out to be required).
     _ = fig.canvas.mpl_connect('resize_event', custom_tight_layout_func)
 
-    plt.show()
+    if ARGS.interactive_plot:
+        plt.show()
 
 
 def plot_magic(dataframe, metadata):
@@ -335,6 +343,10 @@ def plot_magic(dataframe, metadata):
         'system_loadavg1',
     ]
 
+    additional_metrics = list(ARGS.metric)
+    for m in additional_metrics:
+        columns_to_plot.append(m)
+
     # Note(JP): this is a quick workaround to populate properties required in
     # code path downstream.
     ARGS.normalization_factor = 0
@@ -349,6 +361,11 @@ def plot_magic(dataframe, metadata):
     # Defaults are 6.4x4.8 inches at 100 dpi, make canvas significantly larger
     # so that more details can be shown. But... vertically! :)
     # Make vertical size dependent on column count.
+    # Note: `show()` adjusts the figure size to the screen size. Which is
+    # undesired here. This is basically the same problem as discussed in
+    # https://github.com/matplotlib/matplotlib/issues/7338 -- scroll bars
+    # would be an appropriate solution. Interesting:
+    # https://stackoverflow.com/a/42624276
     figure_height_inches = 2.28 * column_count
 
     fig = plt.gcf()
@@ -416,13 +433,41 @@ def plot_magic(dataframe, metadata):
         maxtime_across_series + 0.03 * diff
     )
 
+    def _get_column_plot_config_for_colname(colname):
+
+        # Special treatment for disk metrics: Extract disk devname from metric
+        # name. Then get generic disk-related column plot settings, but inject
+        # the specific disk devname into text (such as labels).
+
+        if colname.startswith('disk_'):
+            m = re.match('disk_(?P<devname>.*?)_.*', colname)
+            disk_devname = m.group('devname')
+            # Build generic column name from specific column name
+            # so that the subsequent dict lookup succeeds.
+            colname = colname.replace(disk_devname, 'DEVNAME')
+
+        # Create copy because of the disk-related modification below.
+        column_plot_config = COLUMN_PLOT_CONFIGS[colname].copy()
+
+        # Now, when these are disk metric plot settings then do some text
+        # processing: insert specific disk device name.
+        if colname.startswith('disk_'):
+            for k, v in column_plot_config.items():
+                if isinstance(v, str):
+                    log.info('replace')
+                    newvalue = v.replace('DEVNAME' , disk_devname)
+                    column_plot_config[k] = newvalue
+
+        return column_plot_config
+
     # Plot individual subplots.
-    for idx, column_name in enumerate(columns_to_plot, 1):
-        series = dataframe[column_name]
+    for idx, colname in enumerate(columns_to_plot, 1):
+        series = dataframe[colname]
 
         # Column-specific plot config such as y label, largely depends on the
         # metric itself.
-        column_plot_config = COLUMN_PLOT_CONFIGS[column_name]
+        column_plot_config = _get_column_plot_config_for_colname(colname)
+
 
         # Subplot-specific plot config, independent of the metric, mainly
         # dependent on the position of the subplot.
@@ -801,10 +846,11 @@ def savefig(title):
     with open(fpath_cmd, 'w') as f:
         f.write(command)
 
-    fpath_figure = fname + '.png'
-    log.info('Writing PNG figure to %s', fpath_figure)
-    plt.savefig(fpath_figure, dpi=150)
+    log.info('Writing figure as PNG to %s', fname + '.png')
+    plt.savefig(fname + '.png', dpi=200)
 
+    log.info('Writing figure as PDF to %s', fname + '.pdf')
+    plt.savefig(fname + '.pdf')
 
 def pretty_timedelta(timedelta):
     seconds = int(timedelta.total_seconds())

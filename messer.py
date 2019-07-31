@@ -566,10 +566,12 @@ def _process_cmdline_args_advanced():
 
 
 def _disk_dev_name_to_metric_name(devname):
-    # Replace dashes with underscores so that the metric name complies
+    # Remove dashes so that the metric name complies
     # with pytables restrictions.. otherwise:
     #  ... it does not match the pattern ``^[a-zA-Z_][a-zA-Z0-9_]*$``
-    devname = devname.replace('-', '_')
+    # Don't replace with underscore because then it's hard to parse the device
+    # name from the metric name.
+    devname = devname.replace('-', '')
     return devname
 
 
