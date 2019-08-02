@@ -858,8 +858,8 @@ def savefig(title):
     log.info('Writing figure as PNG to %s', fname + '.png')
     plt.savefig(fname + '.png', dpi=200)
 
-    log.info('Writing figure as PDF to %s', fname + '.pdf')
-    plt.savefig(fname + '.pdf')
+    # log.info('Writing figure as PDF to %s', fname + '.pdf')
+    # plt.savefig(fname + '.pdf')
 
 
 def pretty_timedelta(timedelta):
