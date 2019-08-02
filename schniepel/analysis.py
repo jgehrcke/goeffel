@@ -354,7 +354,7 @@ def plot_magic(dataframe, metadata):
         'system_loadavg1',
     ]
 
-    additional_metrics = list(ARGS.metric)
+    additional_metrics = list(ARGS.metric) if ARGS.metric else []
     for m in additional_metrics:
         columns_to_plot.append(m)
 
