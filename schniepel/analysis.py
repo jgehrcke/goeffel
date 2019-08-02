@@ -706,19 +706,30 @@ def plot_subplot(ax, column_plot_config, series, plotsettings):
 
     if 'yscale' in column_plot_config:
         if column_plot_config['yscale'] == 'symlog':
-            if 'ylim' not in plotsettings:
-                log.info('symlog: set lower ylim to 0')
-                # Make sure to show the lower end, the zero, by default.
-                _prevmax = ax.get_ylim()[1]
-                ax.set_ylim((0, _prevmax * 1.4))
-            # https://github.com/matplotlib/matplotlib/issues/7008
-            # https://github.com/matplotlib/matplotlib/issues/10369
-            ax.set_yscale(
-                'symlog',
-                linthreshy=1,
-                linscaley=0.25,
-                subsy=[2, 3, 4, 5, 6, 7, 8, 9]
-            )
+            # Do not do this if the values in the time series are all smaller
+            # than `linthreshy=1` below (which is the linear regime in the
+            # symlog plot).
+            _linthreshy = 1
+            if max(series) <= _linthreshy:
+                log.info(
+                    'Do not do symlog: max(series) %s <= lintresh %s',
+                    max(series),
+                    _linthreshy
+                )
+            else:
+                if 'ylim' not in plotsettings:
+                    log.info('symlog: set lower ylim to 0')
+                    # Make sure to show the lower end, the zero, by default.
+                    _prevmax = ax.get_ylim()[1]
+                    ax.set_ylim((0, _prevmax * 1.4))
+                # https://github.com/matplotlib/matplotlib/issues/7008
+                # https://github.com/matplotlib/matplotlib/issues/10369
+                ax.set_yscale(
+                    'symlog',
+                    linthreshy=_linthreshy,
+                    linscaley=0.25,
+                    subsy=[2, 3, 4, 5, 6, 7, 8, 9]
+                )
         else:
             ax.set_yscale(column_plot_config['yscale'])
 
