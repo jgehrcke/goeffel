@@ -103,28 +103,28 @@ def main():
         cmd_magic()
         sys.exit(0)
 
-    raise NotImplementedError
+    if ARGS.command == 'plot':
 
-    # What follows is super useful functionality but this should be properly
-    # abstracted in its own subcommand.
+        # What follows is super useful functionality but this should be properly
+        # abstracted in a nicer way .... in a cleaner subcommand?
 
-    # dataframe_label_pairs = []
-    # for filepath, series_label in ARGS.series:
-    #     dataframe_label_pairs.append(
-    #         (parse_datafile_into_dataframe(filepath), series_label)
-    #     )
+        dataframe_label_pairs = []
+        for filepath, series_label in ARGS.series:
+            dataframe_label_pairs.append(
+                (parse_hdf5file_into_dataframe(filepath), series_label)
+            )
 
-    # # Translate each `--column ....` argument into a dictionary.
-    # column_dicts = []
-    # keys = ('column_name', 'y_label', 'plot_title', 'rolling_wdw_width_seconds')
-    # for values in ARGS.column:
-    #     # TODO: add check that rolling_wdw_width_seconds is an integer.
-    #     column_dicts.append(dict(zip(keys, values)))
+        # Translate each `--column ....` argument into a dictionary.
+        column_dicts = []
+        keys = ('column_name', 'y_label', 'plot_title', 'rolling_wdw_width_seconds')
+        for values in ARGS.column:
+            # TODO: add check that rolling_wdw_width_seconds is an integer.
+            column_dicts.append(dict(zip(keys, values)))
 
-    # for column_dict in column_dicts:
-    #     plot_column_multiple_subplots(dataframe_label_pairs, column_dict)
+        for column_dict in column_dicts:
+            plot_column_multiple_subplots(dataframe_label_pairs, column_dict)
 
-    # plt.show()
+        plt.show()
 
 
 def parse_cmdline_args():
