@@ -779,7 +779,7 @@ def plot_subplot(ax, column_plot_config, series, plotsettings):
 
     # Add tiny series_label label in the top-left corner of the subplot.
     ax.text(
-        0.01, 0.88,
+        0.01, 0.92,
         plotsettings['series_label'],
         verticalalignment='center',
         fontsize=8,
