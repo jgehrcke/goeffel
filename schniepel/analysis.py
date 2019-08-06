@@ -103,28 +103,28 @@ def main():
         cmd_magic()
         sys.exit(0)
 
-    raise NotImplementedError
+    if ARGS.command == 'plot':
 
-    # What follows is super useful functionality but this should be properly
-    # abstracted in its own subcommand.
+        # What follows is super useful functionality but this should be properly
+        # abstracted in a nicer way .... in a cleaner subcommand?
 
-    # dataframe_label_pairs = []
-    # for filepath, series_label in ARGS.series:
-    #     dataframe_label_pairs.append(
-    #         (parse_datafile_into_dataframe(filepath), series_label)
-    #     )
+        dataframe_label_pairs = []
+        for filepath, series_label in ARGS.series:
+            dataframe_label_pairs.append(
+                (parse_hdf5file_into_dataframe(filepath), series_label)
+            )
 
-    # # Translate each `--column ....` argument into a dictionary.
-    # column_dicts = []
-    # keys = ('column_name', 'y_label', 'plot_title', 'rolling_wdw_width_seconds')
-    # for values in ARGS.column:
-    #     # TODO: add check that rolling_wdw_width_seconds is an integer.
-    #     column_dicts.append(dict(zip(keys, values)))
+        # Translate each `--column ....` argument into a dictionary.
+        column_dicts = []
+        keys = ('column_name', 'y_label', 'plot_title', 'rolling_wdw_width_seconds')
+        for values in ARGS.column:
+            # TODO: add check that rolling_wdw_width_seconds is an integer.
+            column_dicts.append(dict(zip(keys, values)))
 
-    # for column_dict in column_dicts:
-    #     plot_column_multiple_subplots(dataframe_label_pairs, column_dict)
+        for column_dict in column_dicts:
+            plot_column_multiple_subplots(dataframe_label_pairs, column_dict)
 
-    # plt.show()
+        plt.show()
 
 
 def parse_cmdline_args():
@@ -354,7 +354,7 @@ def plot_magic(dataframe, metadata):
         'system_loadavg1',
     ]
 
-    additional_metrics = list(ARGS.metric)
+    additional_metrics = list(ARGS.metric) if ARGS.metric else []
     for m in additional_metrics:
         columns_to_plot.append(m)
 
@@ -706,19 +706,30 @@ def plot_subplot(ax, column_plot_config, series, plotsettings):
 
     if 'yscale' in column_plot_config:
         if column_plot_config['yscale'] == 'symlog':
-            if 'ylim' not in plotsettings:
-                log.info('symlog: set lower ylim to 0')
-                # Make sure to show the lower end, the zero, by default.
-                _prevmax = ax.get_ylim()[1]
-                ax.set_ylim((0, _prevmax * 1.4))
-            # https://github.com/matplotlib/matplotlib/issues/7008
-            # https://github.com/matplotlib/matplotlib/issues/10369
-            ax.set_yscale(
-                'symlog',
-                linthreshy=1,
-                linscaley=0.25,
-                subsy=[2, 3, 4, 5, 6, 7, 8, 9]
-            )
+            # Do not do this if the values in the time series are all smaller
+            # than `linthreshy=1` below (which is the linear regime in the
+            # symlog plot).
+            _linthreshy = 1
+            if max(series) <= _linthreshy:
+                log.info(
+                    'Do not do symlog: max(series) %s <= lintresh %s',
+                    max(series),
+                    _linthreshy
+                )
+            else:
+                if 'ylim' not in plotsettings:
+                    log.info('symlog: set lower ylim to 0')
+                    # Make sure to show the lower end, the zero, by default.
+                    _prevmax = ax.get_ylim()[1]
+                    ax.set_ylim((0, _prevmax * 1.4))
+                # https://github.com/matplotlib/matplotlib/issues/7008
+                # https://github.com/matplotlib/matplotlib/issues/10369
+                ax.set_yscale(
+                    'symlog',
+                    linthreshy=_linthreshy,
+                    linscaley=0.25,
+                    subsy=[2, 3, 4, 5, 6, 7, 8, 9]
+                )
         else:
             ax.set_yscale(column_plot_config['yscale'])
 
@@ -759,7 +770,7 @@ def plot_subplot(ax, column_plot_config, series, plotsettings):
         if nf != 0:
             ylim = ylim[0] / nf, ylim[1] / nf
 
-        log.info('set custom y lim')
+        # log.info('set custom y lim')
         ax.set_ylim(ylim)
 
     # A custom Y limit takes precedence over the limit set above.
@@ -768,7 +779,7 @@ def plot_subplot(ax, column_plot_config, series, plotsettings):
 
     # Add tiny series_label label in the top-left corner of the subplot.
     ax.text(
-        0.01, 0.88,
+        0.01, 0.92,
         plotsettings['series_label'],
         verticalalignment='center',
         fontsize=8,
@@ -858,8 +869,8 @@ def savefig(title):
     log.info('Writing figure as PNG to %s', fname + '.png')
     plt.savefig(fname + '.png', dpi=200)
 
-    log.info('Writing figure as PDF to %s', fname + '.pdf')
-    plt.savefig(fname + '.pdf')
+    # log.info('Writing figure as PDF to %s', fname + '.pdf')
+    # plt.savefig(fname + '.pdf')
 
 
 def pretty_timedelta(timedelta):
