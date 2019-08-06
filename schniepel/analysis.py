@@ -770,7 +770,7 @@ def plot_subplot(ax, column_plot_config, series, plotsettings):
         if nf != 0:
             ylim = ylim[0] / nf, ylim[1] / nf
 
-        log.info('set custom y lim')
+        # log.info('set custom y lim')
         ax.set_ylim(ylim)
 
     # A custom Y limit takes precedence over the limit set above.
