@@ -1,5 +1,5 @@
-"""schniepel.__main__: executed when bootstrap directory is called as script."""
+"""goeffel.__main__: executed when bootstrap directory is called as script."""
 
 
-from .schniepel import main
+from .goeffel import main
 main()

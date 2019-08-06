@@ -1,4 +1,4 @@
-# Schniepel
+# Goeffel
 
 Measures the resource utilization of a specific process over time.
 
@@ -9,20 +9,20 @@ Built for Linux. Windows and Mac OS support might come.
 
 **Highlights**:
 
-- High sampling rate: by default, Schniepel uses a sampling interval of 0.5 seconds
+- High sampling rate: by default, Goeffel uses a sampling interval of 0.5 seconds
   for making narrow spikes visible.
-- Schniepel is built for monitoring a program subject to process ID changes. This
+- Goeffel is built for monitoring a program subject to process ID changes. This
   is useful for longevity experiments when the monitored process occasionaly
   restarts (for instance as of fail-over scenarios).
-- Schniepel can run unsupervised and infinitely long with predictable disk space
+- Goeffel can run unsupervised and infinitely long with predictable disk space
   requirements (it applies an output file rotation and retention policy).
-- Schniepel helps keeping data organized: time series data is written into
+- Goeffel helps keeping data organized: time series data is written into
   [HDF5](https://en.wikipedia.org/wiki/Hierarchical_Data_Format) files, and
   annotated with relevant metadata such as the program invocation time, system
-  hostname, and Schniepel software version.
-- Schniepel comes with a data plotting tool (separate from the data acquisition
+  hostname, and Goeffel software version.
+- Goeffel comes with a data plotting tool (separate from the data acquisition
   program).
-- Schniepel values measurement correctness very highly. The core sampling loop does
+- Goeffel values measurement correctness very highly. The core sampling loop does
   little work besides the measurement itself: it writes each sample to a queue.
   A separate process consumes this queue and persists the time series data to
   disk, for later inspection. This keeps the sampling rate predictable upon disk
@@ -54,7 +54,7 @@ this file contains and how to analyze the data).
 
 The program [psrecord](https://github.com/astrofrog/psrecord) (which effectively
 wraps [psutil](https://psutil.readthedocs.io/en/latest/)) has a similar
-fundamental idea as Schniepel; it however does not have a clear separation of
+fundamental idea as Goeffel; it however does not have a clear separation of
 concerns between persisting the data to disk, performing the measurement itself,
 and plotting the data, making it too error-prone and not production-ready.
 
@@ -68,7 +68,7 @@ and plotting the data, making it too error-prone and not production-ready.
 I recommend de-serialize and re-serialize using
 [pandas](https://pandas.pydata.org/). Example one-liner:
 ```
-python -c 'import sys; import pandas as pd; df = pd.read_hdf(sys.argv[1], key="schniepel_timeseries"); df.to_csv(sys.argv[2], index=False)' messer_20190718_213115.hdf5.0001 /tmp/hdf5-as-csv.csv
+python -c 'import sys; import pandas as pd; df = pd.read_hdf(sys.argv[1], key="goeffel_timeseries"); df.to_csv(sys.argv[2], index=False)' messer_20190718_213115.hdf5.0001 /tmp/hdf5-as-csv.csv
 ```
 Note that this significantly inflates the file size (e.g., from 50 MiB to 300
 MiB).
@@ -76,7 +76,7 @@ MiB).
 
 ## Notes
 
-- Schniepel tries to not asymmetrically hide measurement uncertainty. For example,
+- Goeffel tries to not asymmetrically hide measurement uncertainty. For example,
   you might see it measure a CPU utilization of a single-threaded process
   slightly larger than 100 %. That's simply the measurement error. In other
   tooling such as `sysstat` it seems to be common practice to _asymmetrically_
