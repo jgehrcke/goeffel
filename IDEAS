@@ -67,12 +67,12 @@
       clock drift can be measured / excluded
 
 - Allow for installing `schiepel` w/o the depdencies required solely for
-  `schniepel-analysis`.
+  `goeffel-analysis`.
 
 - Add option to not measure IP connections? Can be CPU costly. Measure/compare.
   Does this matter?
 
-- On a loaded system profile schniepel and see where it spends its time.
+- On a loaded system profile goeffel and see where it spends its time.
   Pops up in top with 6 % CPU utilization. A quick `perf top` on the
   sampling process shows that it spends most of its time in kernel space,
   not too bad:

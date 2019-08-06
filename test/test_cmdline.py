@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.abspath('..'))
 
 
 # If we want to measure code coverage across CLI invocations then we can do
-# "coverage -x schniepel". Just need to figure out where to let coverage to
+# "coverage -x goeffel". Just need to figure out where to let coverage to
 # store its state.
 
 
@@ -56,6 +56,6 @@ def testprocess():
 
 def test_a_number_of_features(clitest, testprocess):
     clitest.run(
-        f"schniepel --pid-command 'echo {testprocess.pid}' "
+        f"goeffel --pid-command 'echo {testprocess.pid}' "
         "--diskstats sda --sampling-interval 0.3 --terminate-after-n-samples 1"
     )

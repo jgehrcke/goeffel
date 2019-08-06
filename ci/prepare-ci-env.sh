@@ -7,7 +7,7 @@ set -x
 pip install 'pip==19.2.1' --upgrade
 pip install 'setuptools==41.0.1' --upgrade
 
-# Install Schniepel dependencies from its `setup.py`.
+# Install Goeffel dependencies from its `setup.py`.
 pip install .
 
 # Install test/CI dependencies.
