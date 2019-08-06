@@ -614,22 +614,19 @@ class SampleConsumerProcess(multiprocessing.Process):
 
             self._write_sample_csv_if_enabled(sample)
 
-            # Write N samples to disk together (it is fine to potentially lose
-            # a couple of seconds of time series data). Also write very first
-            # sample immediately so that writing the HDF5 file fails fast (if it
-            # fails, instead of failing only after collecting the first N
-            # samples).
-
+            # Always write very first sample immediately so that writing the
+            # HDF5 file fails fast (if it fails, instead of failing only after
+            # collecting the first N samples).
             if not first_sample_written:
                 self._write_samples_hdf5_if_enabled([sample])
                 first_sample_written = True
-
-            elif len(hdf5_sample_buffer) == HDF5_SAMPLE_WRITE_BATCH_SIZE:
-                self._write_samples_hdf5_if_enabled(hdf5_sample_buffer)
-                hdf5_sample_buffer = []
-
             else:
                 hdf5_sample_buffer.append(sample)
+
+            # Write N samples to disk in one go.
+            if len(hdf5_sample_buffer) == HDF5_SAMPLE_WRITE_BATCH_SIZE:
+                self._write_samples_hdf5_if_enabled(hdf5_sample_buffer)
+                hdf5_sample_buffer = []
 
             log.debug('Consumer iteration: %.6f s', time.monotonic() - t_after_get)
 
