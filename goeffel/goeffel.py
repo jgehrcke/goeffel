@@ -307,7 +307,6 @@ def process_cmdline_args():
     what.add_argument(
         '--pid',
         metavar='PROCESSID',
-        type=int,
         help='A process ID.'
     )
 
@@ -493,6 +492,17 @@ def _process_cmdline_args_advanced():
             _add_dev_columns(devname)
 
     # Do more custom argument processing.
+
+    if ARGS.pid is not None:
+
+        if ARGS.pid == 'trialprocess':
+            ARGS.pid = start_trial_process()
+
+        try:
+            int(ARGS.pid)
+        except ValueError:
+            sys.exit('The value provided to --pid must be an integer')
+
 
     # The sample interval should ideally not be smaller than 0.5 seconds so that
     # kernel counter update errors and other timing errors do not dominate the
@@ -1255,6 +1265,26 @@ class SampleGenerator:
                 delta_read_count / delta_t
 
         return sampledict
+
+
+def start_trial_process():
+    def _trial_process():
+        """Entry point into a trial child process to simplify testing Goeffel
+        and playing with it.
+        """
+        # Don't raise a KeyboardInterrup exception in the child.
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+        while True:
+            time.sleep(0.1)
+
+    log.info('Starting trial process')
+    p = multiprocessing.Process(target=_trial_process)
+    # Let the standard library take care of terminating this when we
+    # exit (this uses an `atexit.register(_exit_function)` hook.
+    p.daemon = True
+    p.start()
+    log.info('Started trial process: process ID %s', p.pid)
+    return p.pid
 
 
 def get_hostname():
