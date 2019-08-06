@@ -72,6 +72,10 @@
 - Add option to not measure IP connections? Can be CPU costly. Measure/compare.
   Does this matter?
 
+- Noticed during development: using `stress` and `pgrep gnome-shell` is nice
+  and all, but maybe: add a test process functionality into Goeffel itself so
+  that playing with it on the command line is easy?
+
 - On a loaded system profile goeffel and see where it spends its time.
   Pops up in top with 6 % CPU utilization. A quick `perf top` on the
   sampling process shows that it spends most of its time in kernel space,
@@ -83,3 +87,26 @@
       11.22%  [kernel]              [k] format_decode
        6.13%  [kernel]              [k] number.isra.2
        3.98%  [kernel]              [k] __memcpy
+
+
+## Precision of sampling interval
+
+This shows the systematic error of sleeping for a constant time (instead of
+using a deadline-based approach) pretty well:
+
+  In [7]: df['unixtime'].diff().mean()
+  Out[7]: 1.0908292996759117
+
+Here, Goeffel was started using a sampling interval of 1.0 seconds.
+
+With two conceptual optimizations this is now much better (a large number of
+samples, 0.5 s sampling interval):
+
+- mean: 0.5003 s
+- max:  0.5014 s
+- min:  0.4989 s
+- std:  0.0004 s
+
+btw, done with pandas like this:
+
+pd.read_hdf('./goeffel_timeseries__20190806_205617.hdf5', key="goeffel_timeseries")['unixtime'].diff().max()
