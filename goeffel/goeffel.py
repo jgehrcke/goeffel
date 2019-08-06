@@ -38,8 +38,6 @@ persisting data on disk).
 In addition to sampling process-specific data, this program also measures
 the utilization of system-wide resources making it straightforward to put the
 process-specific metrics into context.
-
-This program has been written for and tested on CPython 3.5 and 3.6 on Linux.
 """
 
 import argparse
@@ -468,10 +466,6 @@ def _process_cmdline_args_advanced():
         if not ARGS.diskstats:
             return
 
-        # Import here, delayed, instead of in the header (otherwise the command
-        # line help / error reporting is noticeably slowed down). global psutil
-        #import psutil
-
         all_known_devnames = list(psutil.disk_io_counters(perdisk=True).keys())
 
         # Add special notion of 'all' device.
@@ -502,7 +496,6 @@ def _process_cmdline_args_advanced():
             int(ARGS.pid)
         except ValueError:
             sys.exit('The value provided to --pid must be an integer')
-
 
     # The sample interval should ideally not be smaller than 0.5 seconds so that
     # kernel counter update errors and other timing errors do not dominate the
@@ -922,7 +915,7 @@ class SampleGenerator:
         if curdif > 0.05:
             time.sleep(curdif - 0.05)
 
-        # While approaching the deadline to many short sleeps.
+        # While approaching the deadline do many short sleeps.
         while time.monotonic() < deadline:
             time.sleep(0.0005)
 
@@ -946,14 +939,14 @@ class SampleGenerator:
 
     def _get_time_critical_data(self):
         """
-        `t_rel` and differential analysis valuesmust be collected immediately
-        one after another in the same order as before so that the calculation
-        of CPU utilization (differential analysis with the time difference in
-        the denominator) has as little error as possible. Internally,
-        `as_dict()` uses psutil's `oneshot()` context manager for optimizing
-        the process of collecting the requested data in one go. The requested
-        attributes are confirmed to be sampled quickly; tested manually via
-        the timeit module on a not-so-well-performing laptop:
+        `t_rel` and differential analysis values must be collected immediately
+        one after another in the same order as before so that the calculation of
+        CPU utilization (differential analysis with the time difference in the
+        denominator) has as little error as possible. Internally, `as_dict()`
+        uses psutil's `oneshot()` context manager for optimizing the process of
+        collecting the requested data in one go. The requested attributes are
+        confirmed to be sampled quickly; tested manually via the timeit module
+        on a not-so-well-performing laptop:
 
         >>> import psutil
         >>> from timeit import timeit
