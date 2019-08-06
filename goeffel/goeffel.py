@@ -58,6 +58,7 @@ from collections import OrderedDict
 from datetime import datetime
 
 import tables
+import psutil
 
 
 __version__ = "0.1.0"
@@ -148,8 +149,6 @@ def sampleloop(sampleq, consumer_process):
     Ctrl+C, and therefore wrapped in a `KeyboardInterrupt` exception handler
     in the caller.
     """
-
-    import psutil
 
     def _sample_process_loop(pid, sampleq, consumer_process):
         """
@@ -472,7 +471,7 @@ def _process_cmdline_args_advanced():
 
         # Import here, delayed, instead of in the header (otherwise the command
         # line help / error reporting is noticeably slowed down). global psutil
-        import psutil
+        #import psutil
 
         all_known_devnames = list(psutil.disk_io_counters(perdisk=True).keys())
 
@@ -890,22 +889,191 @@ class SampleGenerator:
         This function is expected to raise `psutil.Error` (e.g.
         `psutil.NoSuchProcess`).
         """
-        import psutil
         self._pid = pid
         self._process = psutil.Process(pid)
+        self._process_attrs_to_fetch = [
+                'cpu_times',
+                'io_counters',
+                'memory_info',
+                'num_fds',
+                'cpu_num',
+                'memory_percent',
+                'num_threads',
+                'num_ctx_switches'
+            ]
 
-    def _get_proc_stats_as_dict(self):
-        attrs = [
-            'cpu_times',
-            'io_counters',
-            'memory_info',
-            'num_fds',
-            'cpu_num',
-            'memory_percent',
-            'num_threads',
-            'num_ctx_switches'
-        ]
-        return self._process.as_dict(attrs)
+    def _wait_for_deadline(self, deadline):
+        """Periodically check if a deadline arrived. `deadline` is a value
+        calculated from `time.monotonic()`.
+        """
+
+        # Sleep until shortly before the deadline if the deadline is not near.
+        curdif = deadline - time.monotonic()
+        if curdif > 0.05:
+            time.sleep(curdif - 0.05)
+
+        # While approaching the deadline to many short sleeps.
+        while time.monotonic() < deadline:
+            time.sleep(0.0005)
+
+    def _expensive_snapshot(self):
+        # Get momentary snapshot of the TCP/UDP sockets used by the
+        # process. This is a relatively costly operation, taking more
+        # than 1/100 of a second:
+        #
+        #    timeit('p.connections()', number=100, globals=globals()) / 100
+        #    0.020052049085497858
+        #
+        # `'inet'` means: get all TCP or UDP sockets of type IPv4 and
+        # IPv6.
+        ip_sockets = self._process.connections(kind='inet')
+
+        # What follows is the acquisition of system-wide metrics.
+        # https://serverfault.com/a/85481/121951
+        system_mem = psutil.virtual_memory()
+        loadavg = os.getloadavg()
+        return ip_sockets, system_mem, loadavg
+
+    def _get_time_critical_data(self):
+        """
+        `t_rel` and differential analysis valuesmust be collected immediately
+        one after another in the same order as before so that the calculation
+        of CPU utilization (differential analysis with the time difference in
+        the denominator) has as little error as possible. Internally,
+        `as_dict()` uses psutil's `oneshot()` context manager for optimizing
+        the process of collecting the requested data in one go. The requested
+        attributes are confirmed to be sampled quickly; tested manually via
+        the timeit module on a not-so-well-performing laptop:
+
+        >>> import psutil
+        >>> from timeit import timeit
+        >>> attrs = ['cpu_times', 'io_counters', 'memory_info', 'num_fds', \
+              'cpu_num', 'memory_percent', 'num_threads', 'num_ctx_switches']
+        >>> process = psutil.Process(pid=16738)
+        >>> timeit('process.as_dict(attrs)', number=100, globals=globals()) / 100
+        0.00044520321000163677
+
+        That is, these data are returned within less than a millisecond which
+        is absolutely tolerable.
+
+        `psutil.disk_io_counters()` is similarly fast on my test machine
+        timeit(
+              'psutil.disk_io_counters(perdisk=True)',
+               number=100, globals=globals()) / 100
+        0.0002499251801054925
+        """
+        t_rel = time.monotonic()
+
+        procstats = self._process.as_dict(self._process_attrs_to_fetch)
+
+        diskstats = None
+        if ARGS.diskstats:
+            diskstats = psutil.disk_io_counters(perdisk=True)
+
+        # Also measure and emit wall time.
+        walltime_timestamp = time.time()
+        return t_rel, procstats, diskstats, walltime_timestamp
+
+    def _build_sample(
+            self,
+            t_rel2,
+            t_rel1,
+            walltime_timestamp2,
+            procstats2,
+            procstats1,
+            diskstats2,
+            diskstats1,
+            ip_sockets1,
+            system_mem1,
+            loadavg1):
+        cputimes1 = procstats1['cpu_times']
+        cputimes2 = procstats2['cpu_times']
+        proc_io1 = procstats1['io_counters']
+        proc_io2 = procstats2['io_counters']
+        num_ctx_switches1 = procstats1['num_ctx_switches']
+        num_ctx_switches2 = procstats2['num_ctx_switches']
+
+        delta_t = t_rel2 - t_rel1
+
+        # `walltime_timestamp2` approximates the wall time at t_rel2.
+        # Turn it into a human-readable ISO 8601 datetime string.
+        walltime_timestamp2_isostring_local = datetime.fromtimestamp(
+            walltime_timestamp2).isoformat()
+
+        _delta_cputimes_user = cputimes2.user - cputimes1.user
+        _delta_cputimes_system = cputimes2.system - cputimes1.system
+        _delta_cputimes_total = _delta_cputimes_user + _delta_cputimes_system
+        proc_cpu_util_percent_total = 100 * _delta_cputimes_total / delta_t
+        proc_cpu_util_percent_user = 100 * _delta_cputimes_user / delta_t
+        proc_cpu_util_percent_system = 100 * _delta_cputimes_system / delta_t
+
+        proc_mem1 = procstats1['memory_info']
+        proc_num_fds1 = procstats1['num_fds']
+
+        # Calculate disk I/O statistics
+        disksampledict = self._calc_diskstats(delta_t, diskstats1, diskstats2)
+
+        # Calculate I/O statistics for the process. Instead of bytes per
+        # second calculate througput as MiB per second, whereas 1 MiB is
+        # 1024 * 1024 bytes = 1048576 bytes. Note(JP): I did this because by
+        # default plots with bytes per second are hard to interpret.
+        # However, in other scenarios others might think that bps are
+        # better/more flexible. No perfect solution.
+        proc_disk_read_throughput_mibps = \
+            (proc_io2.read_chars - proc_io1.read_chars) / 1048576.0 / delta_t
+        proc_disk_write_throughput_mibps = \
+            (proc_io2.write_chars - proc_io1.write_chars) / 1048576.0 / delta_t
+        proc_disk_read_rate_hz = (proc_io2.read_count - proc_io1.read_count) / delta_t
+        proc_disk_write_rate_hz = (proc_io2.write_count - proc_io1.write_count) / delta_t
+
+        proc_ctx_switch_rate_hz = \
+            (
+                (num_ctx_switches2.voluntary - num_ctx_switches1.voluntary) +
+                (num_ctx_switches2.involuntary - num_ctx_switches1.involuntary)
+            ) / delta_t
+
+        # Order matters, but only for the CSV output in the sample writer.
+        sampledict = OrderedDict((
+            ('unixtime', walltime_timestamp2),
+            ('isotime_local', walltime_timestamp2_isostring_local),
+            ('proc_pid', self._pid),
+            ('proc_cpu_util_percent_total', proc_cpu_util_percent_total),
+            ('proc_cpu_util_percent_user', proc_cpu_util_percent_user),
+            ('proc_cpu_util_percent_system', proc_cpu_util_percent_system),
+            ('proc_disk_read_throughput_mibps', proc_disk_read_throughput_mibps),
+            ('proc_disk_write_throughput_mibps', proc_disk_write_throughput_mibps),
+            ('proc_disk_read_rate_hz', proc_disk_read_rate_hz),
+            ('proc_disk_write_rate_hz', proc_disk_write_rate_hz),
+            ('proc_cpu_id', procstats2['cpu_num']),
+            ('proc_num_ip_sockets_open', len(ip_sockets1)),
+            ('proc_num_threads', procstats2['num_threads']),
+            ('proc_ctx_switch_rate_hz', proc_ctx_switch_rate_hz),
+            ('proc_mem_rss_percent', procstats2['memory_percent']),
+            ('proc_mem_rss', proc_mem1.rss),
+            ('proc_mem_vms', proc_mem1.vms),
+            ('proc_mem_dirty', proc_mem1.dirty),
+            ('proc_num_fds', proc_num_fds1),
+        ))
+
+        if not ARGS.no_system_metrics:
+            sampledict.update(OrderedDict((
+                ('system_loadavg1', loadavg1[0]),
+                ('system_loadavg5', loadavg1[1]),
+                ('system_loadavg15', loadavg1[2]),
+                ('system_mem_available', system_mem1.available),
+                ('system_mem_total', system_mem1.total),
+                ('system_mem_used', system_mem1.used),
+                ('system_mem_free', system_mem1.free),
+                ('system_mem_shared', system_mem1.shared),
+                ('system_mem_buffers', system_mem1.buffers),
+                ('system_mem_cached', system_mem1.cached),
+                ('system_mem_active', system_mem1.active),
+                ('system_mem_inactive', system_mem1.inactive),
+            )))
+
+        # Add disk sample data to sample dict.
+        sampledict.update(disksampledict)
+        return sampledict
 
     def generate_indefinitely(self):
         """
@@ -914,210 +1082,82 @@ class SampleGenerator:
 
         This function is expected to raise `psutil.Error` (especially
         `psutil.NoSuchProcess`).
+
+        `t_rel1` and `t_rel2` are the reference timestamps for differential
+        analysis (where a time difference is in the denominator of a
+        calculation):
+
+              V2 - V1
+           --------------
+           t_rel2 - t_rel1
+
+        Use a monotonic time source for measuring `t_rel1` and `t_rel2` instead
+        of the system time.
+
+        Get `t_rel1/2` "at the same time" as the data points relevant for the
+        differential analysis. This is done in `_get_time_critical_data()`.
         """
+        t_rel1, procstats1, diskstats1, walltime_timestamp1 = self._get_time_critical_data()
 
-        # Put `psutil` into local namespace (this is fast if it was re-imported
-        # before).
-        import psutil
+        # Now the data for the timing-sensitive differential anlysis has been
+        # acquired. What follows is more time-costly data acquisition for
+        # process-specific metrics as well as system-wide metrics.
+        ip_sockets1, system_mem1, loadavg1 = self._expensive_snapshot()
 
-        # Prepare process analysis. This does not yet look at process metrics,
-        # but already errors out when the PID is unknown.
-
-        # `t_rel1` is the reference timestamp for differential analysis where a
-        # time difference is in the denominator of a calculation:
-        #
-        #           V2 - V1
-        #        --------------
-        #        t_rel2 - t_rel1
-        #
-        #
-        # Use a monotonic time source for measuring t_rel1 (and later t_rel2)
-        # instead of the system time and then get the first set of data points
-        # relevant for the differential analysis immediately after getting
-        # t_rel1.
-        t_rel1 = time.monotonic()
-        procstats1 = self._get_proc_stats_as_dict()
-
-        diskstats1, diskstats2 = None, None
-        if ARGS.diskstats:
-            diskstats1 = psutil.disk_io_counters(perdisk=True)
-
-        time.sleep(ARGS.sampling_interval)
+        self._wait_for_deadline(t_rel1 + ARGS.sampling_interval)
 
         while True:
-
-            # `t_rel2` and `cpu_times` must be collected immediately one after
-            # another in the same order as before so that the below calculation
-            # of CPU utilization (differential analysis with the time difference
-            # in the denominator) is as correct as possible. Internally,
-            # `as_dict()` uses psutil's `oneshot()` context manager for
-            # optimizing the process of collecting the requested data in one go.
-            # The requested attributes are confirmed to be sampled quickly;
-            # tested manually via the timeit module on a not-so-well-performing
-            # laptop:
-            #
-            # >>> import psutil
-            # >>> from timeit import timeit
-            # >>> attrs = ['cpu_times', 'io_counters', 'memory_info', 'num_fds']
-            # >>> process = psutil.Process(pid=20844)
-            # >>> timeit('process.as_dict(attrs)', number=100, globals=globals()) / 100
-            # 0.0001447438000468537
-            #
-            # That is, these data are returned within less than a millisecond which
-            # is absolutely tolerable.
-            #
-            # `psutil.disk_io_counters()` is similarly fast on my test machine
-            # timeit(
-            #       'psutil.disk_io_counters(perdisk=True)',
-            #        number=100, globals=globals()) / 100
-            # 0.0002499251801054925
-            #
-            # Do not do this by default though because on systems with a complex
-            # disk setup I am not sure if it's wise to collect all disk stats
-            # by default.
-
-            t_rel2 = time.monotonic()
-            procstats2 = self._get_proc_stats_as_dict()
-
-            if ARGS.diskstats:
-                diskstats2 = psutil.disk_io_counters(perdisk=True)
-
-            # Now the data for the timing-sensitive differential anlysis has
-            # been acquired. What follows is more time-costly data acquisition
-            # for process-specific metrics.
-
-            # Get momentary snapshot of the TCP/UDP sockets used by the process.
-            # This is a relatively costly operation, taking more than 1/100 of a
-            # second:
-            #
-            #    timeit('p.connections()', number=100, globals=globals()) / 100
-            #    0.020052049085497858
-            #
-            # `'inet'` means: get all TCP or UDP sockets of type IPv4 and IPv6.
-            ip_sockets = self._process.connections(kind='inet')
-
-            # What follows is the acquisition of system-wide metrics.
-            # https://serverfault.com/a/85481/121951
-            system_mem = psutil.virtual_memory()
-            loadavg = os.getloadavg()
+            t_rel2, procstats2, diskstats2, walltime_timestamp2 = self._get_time_critical_data()
+            ip_sockets2, system_mem2, loadavg2 = self._expensive_snapshot()
 
             # Measure and log duration of system interaction for debugging
             # purposes.
             t_rel_for_debug = time.monotonic()
             log.debug('Data acquisition took %.6f s', t_rel_for_debug - t_rel2)
 
-            # All data for this sample has been acquired (what follows is data
-            # mangling, but no calls to `os` or `psutil` anymore). Get the
-            # current time T with microsecond resolution and set it as the time
-            # that this sample has been taken. For those values that are built
-            # by differential analysis it means that the value corresponds to
-            # the time interval [T_previous - P, T_current], with P being the
-            # sample period [s]. Use the system time here because it's what's
-            # most useful even during clock drift (P is measured using a
-            # monotonic clock source, and during clock drift T_previous -
-            # T_current is not equal to P).
-            time_sample_timestamp = time.time()
-            time_sample_isostring_local = datetime.fromtimestamp(
-                time_sample_timestamp).isoformat()
+            # We are right now within TIME INTERVAL 3. The previous time
+            # interval, TIME INTERVAL 2, is noted as [T1, T2]. Here, T1 and T2
+            # represent idealized physical wall time. In the code, the time
+            # difference T2 - T1 is approximated rather well with t_rel2 -
+            # t_rel1.
+            #
+            # We define the timestamp corresponding to TIME INTERVAL 2 in the
+            # time series output to be T2 (the right boundary).
+            # `walltime_timestamp2` approximates that rather well.
+            #
+            # The momentary snapshot data corresponding to TIME INTERVAL 2 was
+            # acquired between T1 and T2, and is stored in variables ending with
+            # 1 (e.g. ip_sockets1).
 
-            # Build CPU utilization values (average CPU utilization within the
-            # past sampling interval).
-            cputimes1 = procstats1['cpu_times']
-            cputimes2 = procstats2['cpu_times']
-            proc_io1 = procstats1['io_counters']
-            proc_io2 = procstats2['io_counters']
-            num_ctx_switches1 = procstats1['num_ctx_switches']
-            num_ctx_switches2 = procstats2['num_ctx_switches']
+            sampledict = self._build_sample(
+                t_rel2,
+                t_rel1,
+                walltime_timestamp2,
+                procstats2,
+                procstats1,
+                diskstats2,
+                diskstats1,
+                ip_sockets1,
+                system_mem1,
+                loadavg1
+            )
 
-            delta_t = t_rel2 - t_rel1
-            _delta_cputimes_user = cputimes2.user - cputimes1.user
-            _delta_cputimes_system = cputimes2.system - cputimes1.system
-            _delta_cputimes_total = _delta_cputimes_user + _delta_cputimes_system
-            proc_cpu_util_percent_total = 100 * _delta_cputimes_total / delta_t
-            proc_cpu_util_percent_user = 100 * _delta_cputimes_user / delta_t
-            proc_cpu_util_percent_system = 100 * _delta_cputimes_system / delta_t
-
-            proc_mem = procstats2['memory_info']
-            proc_num_fds = procstats2['num_fds']
-
-            # Calculate disk I/O statistics
-            disksampledict = self._calc_diskstats(delta_t, diskstats1, diskstats2)
-
-            # Calculate I/O statistics for the process. Instead of bytes per
-            # second calculate througput as MiB per second, whereas 1 MiB is
-            # 1024 * 1024 bytes = 1048576 bytes. Note(JP): I did this because by
-            # default plots with bytes per second are hard to interpret.
-            # However, in other scenarios others might think that bps are
-            # better/more flexible. No perfect solution.
-            proc_disk_read_throughput_mibps = \
-                (proc_io2.read_chars - proc_io1.read_chars) / 1048576.0 / delta_t
-            proc_disk_write_throughput_mibps = \
-                (proc_io2.write_chars - proc_io1.write_chars) / 1048576.0 / delta_t
-            proc_disk_read_rate_hz = (proc_io2.read_count - proc_io1.read_count) / delta_t
-            proc_disk_write_rate_hz = (proc_io2.write_count - proc_io1.write_count) / delta_t
-
-            proc_ctx_switch_rate_hz = \
-                (
-                    (num_ctx_switches2.voluntary - num_ctx_switches1.voluntary) +
-                    (num_ctx_switches2.involuntary - num_ctx_switches1.involuntary)
-                ) / delta_t
-
-            # Order matters, but only for the CSV output in the sample writer.
-            sampledict = OrderedDict((
-                ('unixtime', time_sample_timestamp),
-                ('isotime_local', time_sample_isostring_local),
-                ('proc_pid', self._pid),
-                ('proc_cpu_util_percent_total', proc_cpu_util_percent_total),
-                ('proc_cpu_util_percent_user', proc_cpu_util_percent_user),
-                ('proc_cpu_util_percent_system', proc_cpu_util_percent_system),
-                ('proc_disk_read_throughput_mibps', proc_disk_read_throughput_mibps),
-                ('proc_disk_write_throughput_mibps', proc_disk_write_throughput_mibps),
-                ('proc_disk_read_rate_hz', proc_disk_read_rate_hz),
-                ('proc_disk_write_rate_hz', proc_disk_write_rate_hz),
-                ('proc_cpu_id', procstats2['cpu_num']),
-                ('proc_num_ip_sockets_open', len(ip_sockets)),
-                ('proc_num_threads', procstats2['num_threads']),
-                ('proc_ctx_switch_rate_hz', proc_ctx_switch_rate_hz),
-                ('proc_mem_rss_percent', procstats2['memory_percent']),
-                ('proc_mem_rss', proc_mem.rss),
-                ('proc_mem_vms', proc_mem.vms),
-                ('proc_mem_dirty', proc_mem.dirty),
-                ('proc_num_fds', proc_num_fds),
-            ))
-
-            if not ARGS.no_system_metrics:
-                sampledict.update(OrderedDict((
-                    ('system_loadavg1', loadavg[0]),
-                    ('system_loadavg5', loadavg[1]),
-                    ('system_loadavg15', loadavg[2]),
-                    ('system_mem_available', system_mem.available),
-                    ('system_mem_total', system_mem.total),
-                    ('system_mem_used', system_mem.used),
-                    ('system_mem_free', system_mem.free),
-                    ('system_mem_shared', system_mem.shared),
-                    ('system_mem_buffers', system_mem.buffers),
-                    ('system_mem_cached', system_mem.cached),
-                    ('system_mem_active', system_mem.active),
-                    ('system_mem_inactive', system_mem.inactive),
-                )))
-
-            # Add disk sample data to sample dict.
-            sampledict.update(disksampledict)
-
-            # For differential values, store 'new values' as 'old values' for
-            # next iteration.
+            # Store 'new values' as 'old values' for the next iteration.
+            t_rel1 = t_rel2
             procstats1 = procstats2
             diskstats1 = diskstats2
-            t_rel1 = t_rel2
+            ip_sockets1 = ip_sockets2
+            system_mem1 = system_mem2
+            loadavg1 = loadavg2
 
-            # Return newly acquired sample to the consumer of this generator.
+            # Return newly acquired sample (dictionary object) to the consumer
+            # of this generator.
             yield sampledict
 
-            # Wait approximately for the configured sampling interval.
-            # Deviations from the desired value do not contribute to the
-            # measurement error; the exact duration is measured by the sampling
-            # loop.
-            time.sleep(ARGS.sampling_interval)
+            # Wait approximately for the moment in time t_rel2 + sampling
+            # interval. Small deviations from the desired sampling interval do
+            # not contribute to the measurement error.
+            self._wait_for_deadline(t_rel2 + ARGS.sampling_interval)
 
     def _calc_diskstats(self, delta_t, s1, s2):
         """
@@ -1125,7 +1165,7 @@ class SampleGenerator:
 
         `s1` and `s2` must each be an object returned by
         `psutil.disk_io_counters()`, one at time t1, and the other at the (later)
-        time t2, with t2 - t2 = delta_t.
+        time t2, with t2 - t1 = delta_t.
         """
         if not ARGS.diskstats:
             return {}
