@@ -4,7 +4,7 @@ from setuptools import setup
 
 version = re.search(
     r'^__version__\s*=\s*"(.*)"',
-    open('schniepel/schniepel.py').read(),
+    open('goeffel/goeffel.py').read(),
     re.M
     ).group(1)
 
@@ -14,12 +14,12 @@ with open('README.md', 'rb') as f:
 
 
 setup(
-    name='schniepel',
-    packages=['schniepel'],
+    name='goeffel',
+    packages=['goeffel'],
     entry_points={
         'console_scripts': [
-            'schniepel = schniepel.schniepel:main',
-            'schniepel-analysis = schniepel.analysis:main'
+            'goeffel = goeffel.goeffel:main',
+            'goeffel-analysis = goeffel.analysis:main'
             ]
         },
     version=version,
@@ -28,7 +28,7 @@ setup(
     long_description_content_type='text/markdown',
     author='Dr. Jan-Philip Gehrcke',
     author_email='jgehrcke@googlemail.com',
-    url='https://github.com/jgehrcke/schniepel',
+    url='https://github.com/jgehrcke/goeffel',
     classifiers=[
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python',
