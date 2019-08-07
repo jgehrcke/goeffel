@@ -55,17 +55,6 @@
 - architecture: if the sample writer crashes for whichever reason we want to
   crash the entire program, right?
 
-- sampling loop timekeeping:
-
-    - use deadline-based approach with a periodic poll
-      to minimize a systematic error dominating the sample time stamps
-      (sample interval + sample duration).
-
-    - think once again about which timestamp to associate with the sample.
-
-    - maybe emit monotonic time source into its own column, so that system
-      clock drift can be measured / excluded
-
 - Allow for installing `goefel` w/o the depdencies required solely for
   `goeffel-analysis`.
 
