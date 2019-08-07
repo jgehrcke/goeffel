@@ -61,18 +61,62 @@ and plotting the data, making it too error-prone and not production-ready.
 
 ## Usage
 
-### Hints and tricks
+### Tips and tricks
 
-#### Convert an HDF5 file to a CSV file
+#### How to convert a Goeffel HDF5 file into a CSV file
 
-I recommend de-serialize and re-serialize using
+I recommend to de-serialize and re-serialize using
 [pandas](https://pandas.pydata.org/). Example one-liner:
 ```
-python -c 'import sys; import pandas as pd; df = pd.read_hdf(sys.argv[1], key="goeffel_timeseries"); df.to_csv(sys.argv[2], index=False)' messer_20190718_213115.hdf5.0001 /tmp/hdf5-as-csv.csv
+python -c 'import sys; import pandas as pd; df = pd.read_hdf(sys.argv[1], key="goeffel_timeseries"); df.to_csv(sys.argv[2], index=False)' goeffel_20190718_213115.hdf5.0001 /tmp/hdf5-as-csv.csv
 ```
 Note that this significantly inflates the file size (e.g., from 50 MiB to 300
 MiB).
 
+#### How to visualize and browse the contents of an HDF5 file
+
+At some point you might feel inclined to poke around in an HDF5 file created by
+Goeffel or to do custom data inspection / processing. In that case I recommend
+to use one of the various available open-source HDF5 tools for managing and
+viewing HDF5 files. One GUI tool I have frequently used is
+[ViTables](http://vitables.org/). Install it with `pip install vitables` and
+then do e.g.
+
+```text
+vitables goeffel_20190718_213115.hdf5
+```
+
+This opens a GUI which allows for browsing the tabular time series data, for
+viewing the meta data in the file, for exporting data as CSV, for querying the
+data, and various other things.
+
+#### How to do quick data analysis using IPython and pandas
+
+I recommend to start an [IPython](https://ipython.org/) REPL:
+```text
+pip install ipython  # if you have not done so yet
+ipython
+```
+Load the HDF5 file into a `pandas` data frame:
+```
+In [1]: import pandas as pd
+In [2]: df = pd.read_hdf('goeffel_timeseries__20190806_213704.hdf5', key='goeffel_timeseries')
+```
+From here you can do anything.
+
+For example, let's have a look at the mean value of the actual sampling interval
+used in this specific Goeffel time series:
+```
+In [3]: df['unixtime'].diff().mean()
+Out[3]: 0.5003192476604296
+```
+
+Or, let's see how many threads the monitored process used at most during the
+entire observation period:
+```
+In [4]: df['proc_num_threads'].max()
+Out[4]: 1
+```
 
 ## Notes
 
