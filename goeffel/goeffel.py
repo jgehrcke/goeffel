@@ -227,12 +227,19 @@ class HDF5Schema:
     def __init__(self):
 
         self.schema_dict = {
-            # Store time in two formats: for flexible analysis store a 64 bit
-            # unix timestamp (subsecond precision). For convenience, also store
-            # a text representation of the local time (also with subsecond
-            # precision).
+            # Store wall time in two formats: for flexible analysis store a 64
+            # bit unix timestamp (subsecond precision, no timezone information).
+            # For convenience, also store a text representation of the local
+            # time (also with subsecond precision). Also store monotonic time
+            # source data as the most correct time series reference (not subject
+            # to clock drift).
             'unixtime': tables.Time64Col(pos=0),
             'isotime_local': tables.StringCol(26, pos=1),
+
+            # Could this potentially be stored with 32 bit precision?
+            # http://www.pytables.org/latest/usersguide/datatypes.html
+            # https://github.com/adafruit/circuitpython/issues/342
+            'monotime': tables.Time64Col(pos=2),
         }
 
         # Add more default columns, in the order as enumerated here.
@@ -1039,6 +1046,7 @@ class SampleGenerator:
         sampledict = OrderedDict((
             ('unixtime', walltime_timestamp2),
             ('isotime_local', walltime_timestamp2_isostring_local),
+            ('monotime', t_rel2),
             ('proc_pid', self._pid),
             ('proc_cpu_util_percent_total', proc_cpu_util_percent_total),
             ('proc_cpu_util_percent_user', proc_cpu_util_percent_user),
