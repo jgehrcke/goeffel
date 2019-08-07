@@ -212,24 +212,27 @@ interval.
 
 * `unixtime` encodes the wall time. It is a canonical Unix timestamp (seconds
   since epoch, double precision floating point number); with sub-second
-  precision and no timezone information. This is the general-purpose timestamp
-  column for automated time series analysis. Attention: this is subject to
-  system clock drift (in extreme cases this might go backwards in your time
-  series).
+  precision and no timezone information. This is compatible with a wide range of
+  tooling and therefore the general-purpose timestamp column for time series
+  analysis (also see [How to convert the `unixtime` column into a
+  `pandas.DatetimeIndex`](#how-to-convert-the-unixtime-column-into-a-pandasdatetimeindex)).
+  **Note**: this is subject to system clock drift. In extreme cases this might
+  go backwards, have jumps, and be a useless metric. In that case the `monotime`
+  metric helps (see below).
 
 * `isotime_local` is a human-readable version of the same timestamp as stored in
   `unixtime`. It is a 26 character long text representation of the *local* time
-  using an ISO 8601 notation, also encoding sub-second precision. Just as
-  `unixtime` this is subject to clock drift (in extreme cases this might go
-  backwards in your time series).
+  using an ISO 8601 notation (and therefore also machine-readable). Like
+  `unixtime` this metric is subject to system clock drift and might become
+  pretty useless in extreme cases.
 
 * `monotime` is based on a so-called
   [monotonic](https://www.python.org/dev/peps/pep-0418/#id19) clock source which
   is *not* subject to (accidental or well-intended) system clock drift. This
   column encodes most accurately the relative time difference between any two
-  samples stored in the time series file (the timestamps encoded in this column
-  only make sense relative to each other; the difference between any two values
-  in this column is a time difference in seconds, with sub-second precision).
+  samples in the time series. The timestamps encoded in this column only make
+  sense relative to each other; the difference between any two values in this
+  column is a *wall time* difference in seconds, with sub-second precision.
 
 
 #### `proc_pid`
