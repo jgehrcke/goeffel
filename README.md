@@ -31,7 +31,7 @@ Built for Linux. Windows and Mac OS support might come.
   seconds.
 
 
-## Motivation
+## Prior art (and motivation)
 
 This was born out of a need for solid tooling. We started with [pidstat from
 sysstat](https://github.com/sysstat/sysstat/blob/master/pidstat.c), launched as
