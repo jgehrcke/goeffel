@@ -262,6 +262,16 @@ Fraction of process [resident set size](https://stackoverflow.com/a/21049737)
 Momentary state at sampling time.
 
 
+#### `proc_mem_rss`, `proc_mem_vms`. `proc_mem_dirty`
+
+Various memory usage metrics of the monitored process. See the [psutil
+docs](https://psutil.readthedocs.io/en/release-5.3.0/#psutil.Process.memory_info)
+for a quick summary of what the values mean. However, note that the values need
+careful interpretation, as is hopefully obvious from discussions like
+[this](https://serverfault.com/q/138427) and
+[this](https://serverfault.com/q/138427).
+
+Momentary snapshot at sampling time.
 
 
 
