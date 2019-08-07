@@ -139,17 +139,43 @@ Out[4]: 1
   bookkeeping system.
 
 
-## Measurands (columns, and their units)
+## Measurands
 
-The quantities intended to be measured.
+The individual columns, their units, and their meaning:
+
+#### `unixtime`, `isotime_local`, `monotime`
+
+The timestamp corresponding to the *right* boundary of the sampled time
+interval.
+
+* `unixtime` encodes the wall time. It is a canonical Unix timestamp (seconds
+  since epoch, double precision floating point number); with sub-second
+  precision and no timezone information. This is the general-purpose timestamp
+  column for automated time series analysis. Attention: this is subject to
+  system clock drift (in extreme cases this might go backwards in your time
+  series).
+
+* `isotime_local` is a human-readable version of the same timestamp as stored in
+  `unixtime`. It is a 26 character long text representation of the *local* time
+  using an ISO 8601 notation, also encoding sub-second precision. Just as
+  `unixtime` this is subject to clock drift (in extreme cases this might go
+  backwards in your time series).
+
+* `monotime` is based on a so-called
+  [monotonic](https://www.python.org/dev/peps/pep-0418/#id19) clock source which
+  is *not* subject to (accidental or well-intended) system clock drift. This
+  column encodes most accurately the relative time difference between any two
+  samples stored in the time series file (the timestamps encoded in this column
+  only make sense relative to each other; the difference between any two values
+  in this column is a time difference in seconds, with sub-second precision).
 
 
-#### `proc_cpu_id`
+#### `proc_pid`
 
-The ID of the CPU that this process is currently running on.
+The process ID of the monitored process. Might change if the program was invoked
+with the `--pid-command` option.
 
 Momentary state at sampling time.
-
 
 #### `proc_cpu_util_percent_total`
 
@@ -165,13 +191,24 @@ This is based on the sum of the time spent in user space and in kernel space.
 For a more fine-grained picture the following two metrics are also available:
 `proc_cpu_util_percent_user`, and `proc_cpu_util_percent_system`.
 
+#### `proc_cpu_id`
+
+The ID of the CPU that this process is currently running on.
+
+Momentary state at sampling time.
+
+#### `proc_ctx_switch_rate_hz`
+
+The rate of ([voluntary and
+involuntary](https://unix.stackexchange.com/a/442991)) context switches in `Hz`.
+
+Mean over the past sampling interval.
 
 #### `proc_num_threads`
 
 The number of threads in the process.
 
 Momentary state at sampling time.
-
 
 #### `proc_num_ip_sockets_open`
 
@@ -181,26 +218,38 @@ matter.
 
 Momentary state at sampling time.
 
-
 #### `proc_num_fds`
 
 The number of file descriptors currently opened by this process.
 
 Momentary state at sampling time.
 
-
 #### `proc_disk_read_throughput_mibps` and `proc_disk_write_throughput_mibps`
 
 The disk I/O throughput of the inspected process, in `MiB/s`.
 
-Based on Linux' `/proc/<pid>/io` `rchar` and `wchar`. A highly relevant
-[piece of documentation](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/Documentation/filesystems/proc.txt) (emphasis mine):
+Based on Linux' `/proc/<pid>/io` `rchar` and `wchar`. Relevant
+[Linux kernel documentation](https://github.com/torvalds/linux/blob/33920f1ec5bf47c5c0a1d2113989bdd9dfb3fae9/Documentation/filesystems/proc.txt#L1609) (emphasis mine):
 
-> The number of bytes which this task has caused to be read from storage. This
-> is simply the sum of bytes which this process passed to read() and pread().
-> *It includes things like tty IO* and it is unaffected by whether or not actual
-> physical disk IO was required (*the read might have been satisfied from
-> pagecache*)
+> `rchar`: The number of bytes which this task has caused to be read from
+> storage. This is simply the sum of bytes which this process passed to read()
+> and pread(). *It includes things like tty IO* and it is unaffected by whether
+> or not actual physical disk IO was required (*the read might have been
+> satisfied from pagecache*).
+
+> `wcar`: The number of bytes which this task has caused, or shall cause to be
+> written to disk. Similar caveats apply here as with rchar.
+
+Mean over the past sampling interval.
+
+#### `proc_disk_read_rate_hz` and `proc_disk_write_rate_hz`
+
+The rate of read/write system calls issued by the process as inferred from the
+Linux `/proc` file system. The relevant `syscr`/`syscw` counters are as of now
+only documented with "_read I/O operations, i.e. syscalls like read() and
+pread()_" and "_write I/O operations, i.e. syscalls like write() and pwrite()_".
+Reference:
+[Documentation/filesystems/proc.txt](https://github.com/torvalds/linux/blob/33920f1ec5bf47c5c0a1d2113989bdd9dfb3fae9/Documentation/filesystems/proc.txt#L1628)
 
 Mean over the past sampling interval.
 
@@ -213,12 +262,7 @@ Fraction of process [resident set size](https://stackoverflow.com/a/21049737)
 Momentary state at sampling time.
 
 
-#### `proc_ctx_switch_rate_hz`
 
-The rate of ([voluntary and
-involuntary](https://unix.stackexchange.com/a/442991)) context switches in `Hz`.
-
-Mean over the past sampling interval.
 
 
 (list incomplete)
