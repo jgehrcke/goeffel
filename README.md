@@ -234,10 +234,11 @@ interval.
   sense relative to each other; the difference between any two values in this
   column is a *wall time* difference in seconds, with sub-second precision.
 
+### Process-specific metrics
 
 #### `proc_pid`
 
-The process ID of the monitored process. Might change if the program was invoked
+The process ID of the monitored process. It can change if Goeffel was invoked
 with the `--pid-command` option.
 
 Momentary state at sampling time.
@@ -248,9 +249,9 @@ The CPU utilization of the process in `percent`.
 
 Mean over the past sampling interval.
 
-If the inspected process is known to contain just a single thread then
-this can still sometimes be larger than 100 % as of measurement errors. If the
-process contains more than one thread then this can go far beyond 100 %.
+If the inspected process is known to contain just a single thread then this can
+still sometimes be larger than 100 % as of measurement errors. If the process
+runs more than one thread then this can go far beyond 100 %.
 
 This is based on the sum of the time spent in user space and in kernel space.
 For a more fine-grained picture the following two metrics are also available:
