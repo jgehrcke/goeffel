@@ -175,31 +175,15 @@ DatetimeIndex(['2019-08-07 15:43:33.798929930',
 
 ## Measurands
 
-Yes, [measurand](https://en.wiktionary.org/wiki/measurand) is a word! This
-section attempts to describe the individual columns ("metrics"), their units,
-and their meaning. There are four main categories:
+[Measurand](https://en.wiktionary.org/wiki/measurand) is a word! This section
+attempts to describe the individual data columns ("metrics"), their units, and
+their meaning. There are four main categories:
 
 - [Timestamps](#timestamps)
 - [Process-specific metrics](#process-specific-metrics)
 - [Disk metrics](#disk-metrics)
 - [System-wide metrics](#system-wide-metrics)
 
-
-### Disk metrics
-
-`disk_<DEV>_util_percent`
-
-`disk_<DEV>_write_latency_ms`
-
-`disk_<DEV>_read_latency_ms`
-
-`disk_<DEV>_merged_read_rate_hz`
-
-`disk_<DEV>_merged_write_rate_hz`
-
-`disk_<DEV>_userspace_read_rate_hz`
-
-`disk_<DEV>_userspace_write_rate_hz`
 
 ### Timestamps
 
@@ -317,14 +301,12 @@ Reference:
 
 Mean over the past sampling interval.
 
-
 #### `proc_mem_rss_percent`
 
 Fraction of process [resident set size](https://stackoverflow.com/a/21049737)
 (RSS) relative to machine's physical memory size in `percent`.
 
 Momentary state at sampling time.
-
 
 #### `proc_mem_rss`, `proc_mem_vms`. `proc_mem_dirty`
 
@@ -336,6 +318,93 @@ careful interpretation, as is hopefully obvious from discussions like
 [this](https://serverfault.com/q/138427).
 
 Momentary snapshot at sampling time.
+
+
+### Disk metrics
+
+Only collected if Goeffel is invoked with the `--diskstats <DEV>` argument. The
+resulting data column names contain the device name `<DEV>` (note however that
+dashes in `<DEV>` get removed when building the column names).
+
+Note that the conclusiveness of some of these disk metrics is limited. I believe
+that [this blog post](https://blog.serverfault.com/2010/07/06/777852755/) nicely
+covers a few basic Linux disk I/O concepts that should be known prior to reading
+a meaning into these numbers.
+
+#### `disk_<DEV>_util_percent`
+
+This implements iostat's disk `%util` metric.
+
+I like to think of it as the ratio between the actual (wall) time elapsed in the
+sampled time interval, and the corresponding device's "busy time" in the very
+same time interval, expressed in percent. The iostat documentation describes
+this metric in the following words:
+
+> Percentage of elapsed time during which I/O requests were issued to the device
+> (bandwidth  utilization  for the device)."
+
+This is the mean over the sampling interval.
+
+**Note**: In case of modern storage systems `100 %` utilization usually does
+**not** mean that the device is saturated. I would like to quote [Marc
+Brooker](https://brooker.co.za/blog/2014/07/04/iostat-pct.html):
+
+> As a measure of general IO busyness `%util` is fairly handy, but as an
+> indication of how much the system is doing compared to what it can do, it's
+> terrible.
+
+#### `disk_<DEV>_write_latency_ms` and `disk_<DEV>_read_latency_ms`
+
+This implements iostat's `w_await` which is documented with
+
+> The average time (in milliseconds) for write requests issued to the device to
+> be served. This includes the time spent by the requests in queue and the time
+> spent servicing them.
+
+On Linux this is built using `/proc/diskstats` documented
+[here](https://github.com/torvalds/linux/blob/v5.3-rc3/Documentation/admin-guide/iostats.rst#io-statistics-fields).
+Specifically, this uses field 8 ("number of milliseconds spent writing") and
+field 5 ("number of writes completed"). Notably, the latter it is *not* the
+merged write count but the user space write count (which seems to be what iostat
+uses for calculating `w_await`).
+
+This can be a useful metric, but please be aware of its meaning and limitations.
+To put this into perspective, in an experiment I have seen that the following
+can happen within a second of real time (observed via `iostat -x 1 | grep xvdh`
+and via direct monitoring of `/proc/diskstats`): 3093 userspace write requests
+served, merged into 22 device write requests, yielding a total of 120914
+milliseconds "spent writing", resulting in a mean write latency of 25 ms. But
+what do these 25 ms really mean here? On average, humans have less than two
+legs, for sure. The current implementation method reproduces iostat output,
+which was the initial goal. Suggestions for improvement are very welcome.
+
+This is the mean over the sampling interval.
+
+The same considerations hold true for `r_await`, correspondingly.
+
+#### `disk_<DEV>_merged_read_rate_hz` and `disk_<DEV>_merged_write_rate_hz`
+
+The _merged_ read and write request rate.
+
+The Linux kernel attempts to merge individual user space requests before passing
+them to the storage hardware. For non-random I/O patterns this greatly reduces
+the rate of individual reads and writes issued to disk.
+
+Built using fields 2 and 6 in `/proc/diskstats` documented
+[here](https://github.com/torvalds/linux/blob/v5.3-rc3/Documentation/admin-guide/iostats.rst#io-statistics-fields).
+
+This is the mean over the sampling interval.
+
+#### `disk_<DEV>_userspace_read_rate_hz` and `disk_<DEV>_userspace_write_rate_hz`
+
+The read and write request rate issued from user space point of view (before
+merges).
+
+Built using fields 1 and 5 in `/proc/diskstats` documented
+[here](https://github.com/torvalds/linux/blob/v5.3-rc3/Documentation/admin-guide/iostats.rst#io-statistics-fields).
+
+This is the mean over the sampling interval.
+
 
 ### System-wide metrics
 
@@ -385,6 +454,7 @@ About disk I/O statistics:
 - https://blog.serverfault.com/2010/07/06/777852755/ (interpreting iostat output)
 - https://unix.stackexchange.com/a/462732 (What are merged writes?)
 - https://stackoverflow.com/a/8512978 (what is`%util` in iostat?)
+- https://brooker.co.za/blog/2014/07/04/iostat-pct.html
 - https://coderwall.com/p/utc42q/understanding-iostat
 - https://www.percona.com/doc/percona-toolkit/LATEST/pt-diskstats.html
 
