@@ -2,8 +2,8 @@
 
 Measures the resource utilization of a specific process over time.
 
-This program also measures the utilization / saturation of system-wide resources
-making it straightforward to put the process-specific metrics into context.
+Also measures the utilization / saturation of system-wide resources:
+makes it easy to put the process-specific metrics into context.
 
 Built for Linux. Windows and Mac OS support might come.
 
