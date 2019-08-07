@@ -35,6 +35,12 @@
 - Show magic
 - Show non-interactive magic, writing PNG file
 
+## Docs
+
+- Explain name, show Göffel, spork
+- Add note about alpha/beta software, that the CLI in particular may be subject
+  to change.
+
 
 ## Misc notes
 
