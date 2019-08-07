@@ -47,16 +47,14 @@ Uber has a delightful README about the general measurement methodology and
 overall seems to be a great tool. However, it seems to be optimized for
 interactive usage (whereas we were looking for a robust measurement program
 which can be pointed at a process and then be left unattended for a significant
-while) and there does not seem to be a decent approach towards persisting the
-collected time series data on disk for later inspection (it seems to be able to
-write a binary file when using `-cpuprofile` but it is a little unclear what
-this file contains and how to analyze the data).
+while) and there does not seem to be a well-documented approach towards
+persisting the collected time series data on disk for later inspection.
 
 The program [psrecord](https://github.com/astrofrog/psrecord) (which effectively
 wraps [psutil](https://psutil.readthedocs.io/en/latest/)) has a similar
 fundamental idea as Goeffel; it however does not have a clear separation of
 concerns between persisting the data to disk, performing the measurement itself,
-and plotting the data, making it too error-prone and not production-ready.
+and analyzing/plotting the data.
 
 
 ## Usage
