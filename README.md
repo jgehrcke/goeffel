@@ -177,7 +177,33 @@ DatetimeIndex(['2019-08-07 15:43:33.798929930',
 
 ## Measurands
 
-The individual columns, their units, and their meaning:
+Yes, [measurand](https://en.wiktionary.org/wiki/measurand) is a word! This
+section attempts to describe the individual columns ("metrics"), their units,
+and their meaning. There are four main categories:
+
+- [Timestamps](#timestamps)
+- [Process-specific metrics](#process-specific-metrics)
+- [Disk metrics](#disk-metrics)
+- [System-wide metrics](#system-wide-metrics)
+
+
+### Disk metrics
+
+`disk_<DEV>_util_percent`
+
+`disk_<DEV>_write_latency_ms`
+
+`disk_<DEV>_read_latency_ms`
+
+`disk_<DEV>_merged_read_rate_hz`
+
+`disk_<DEV>_merged_write_rate_hz`
+
+`disk_<DEV>_userspace_read_rate_hz`
+
+`disk_<DEV>_userspace_write_rate_hz`
+
+### Timestamps
 
 #### `unixtime`, `isotime_local`, `monotime`
 
