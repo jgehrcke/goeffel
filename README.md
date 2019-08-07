@@ -339,9 +339,32 @@ careful interpretation, as is hopefully obvious from discussions like
 
 Momentary snapshot at sampling time.
 
+### System-wide metrics
 
+`system_loadavg1`
 
-(list incomplete)
+`system_loadavg5`
+
+`system_loadavg15`
+
+`system_mem_available`
+
+`system_mem_total`
+
+`system_mem_used`
+
+`system_mem_free`
+
+`system_mem_shared`
+
+`system_mem_buffers`
+
+`system_mem_cached`
+
+`system_mem_active`
+
+`system_mem_inactive`
+
 
 
 ## Valuable references
