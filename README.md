@@ -118,6 +118,42 @@ In [4]: df['proc_num_threads'].max()
 Out[4]: 1
 ```
 
+#### How to convert the `unixtime` column into a `pandas.DatetimeIndex`
+
+The HDF5 file contains a `unixtime` column which contains canonical Unix
+timestamp data ready to be consumed by a plethora of tools. If you are like me
+and like to use `pandas` then it is good to know how to convert this into a
+native `pandas.DateTimeIndex`:
+
+```
+In [1]: import pandas as pd
+In [2]: df = pd.read_hdf('goeffel_timeseries__20190807_174333.hdf5', key='goeffel_timeseries')
+
+# Now the data frame has an integer index.
+In [3]: type(df.index)
+Out[3]: pandas.core.indexes.numeric.Int64Index
+
+# Parse unixtime column.
+In [4]: timestamps = pd.to_datetime(df['unixtime'], unit='s')
+
+# Replace the index of the data frame.
+In [5]: df.index = timestamps
+
+# Now the data frame has a DatetimeIndex.
+In [6]: type(df.index)
+Out[6]: pandas.core.indexes.datetimes.DatetimeIndex
+
+# Let's look at some values.
+In [7]: df.index[:5]
+Out[7]:
+DatetimeIndex(['2019-08-07 15:43:33.798929930',
+               '2019-08-07 15:43:34.300590992',
+               '2019-08-07 15:43:34.801260948',
+               '2019-08-07 15:43:35.301798105',
+               '2019-08-07 15:43:35.802226067'],
+              dtype='datetime64[ns]', name='unixtime', freq=None)
+```
+
 ## Notes
 
 - Goeffel tries to not asymmetrically hide measurement uncertainty. For example,
