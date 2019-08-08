@@ -30,8 +30,86 @@ Built for Linux. Windows and Mac OS support might come.
   in cloud environments where we sometimes see fsync latencies of multiple
   seconds.
 
+# CLI usage
 
-## Prior art (and motivation)
+## `goeffel`: data acquisition
+
+## `goeffel-analysis`: data inspection and visualization
+
+**Note**: `goeffel-analysis` provides an opinionated and limited approach to
+visualizing data. For advanced and thorough data analysis I recommend building a
+custom (maybe even ad-hoc!) data analysis pipeline using `pandas` and
+`matplotlib` (or using the tooling of your choice).
+
+**Warning**: The command line interface provided by `goeffel-analysis`,
+especially for the plot commands, might change in the future. Suggestions for
+improvement are welcome.
+
+### `goeffel-analysis inspect`:
+
+Use `goeffel-analysis inspect <path-to-HDF5-file>` for inspecting the contents
+of a Goeffel HDF5 file. Example:
+
+```text
+goeffel-analysis inspect mwst18-master1-journal_20190801_111952.hdf5
+Measurement meta data:
+  System hostname: int-master1-mwt18.scaletesting.mesosphe.re
+  Invocation time (local): 20190801_111952
+  PID command: pgrep systemd-journal
+  PID: None
+  Sampling interval: 1.0 s
+
+Table properties:
+  Number of rows: 24981
+  Number of columns: 38
+  Number of data points (rows*columns): 9.49E+05
+  First row's (local) time: 2019-08-01T11:19:53.613377
+  Last  row's (local) time: 2019-08-01T18:52:49.954582
+  Time span: 7h 32m 56s
+
+Column names:
+  unixtime
+  ... snip ...
+  system_mem_inactive
+```
+
+### `goeffel-analysis magic`: quickly plot data from a single time series file
+
+```bash
+goeffel-analysis magic mwst18-master1-journal_20190801_111952.hdf5
+```
+
+Screenshot here
+
+### `goeffel-analysis plot`: generic plot command
+
+Can be used for example for comparing multiple time series. Say you have
+monitored the same process across multiple replicas in a distributed system and
+would like to compare the time evolution of a certain metric across these
+replicas. Then the `goeffel-analysis plot` command is here to help, invoked with
+multiple `--series` arguments:
+
+```bash
+goeffel-analysis plot \
+  --series mwst18-master1-journal_20190801_111952.hdf5 master1 \
+  --series mwst18-master2-journal_20190801_112136.hdf5 master2 \
+  --series mwst18-master3-journal_20190801_112141.hdf5 master3 \
+  --series mwst18-master4-journal_20190801_112151.hdf5 master4 \
+  --series mwst18-master5-journal_20190801_112157.hdf5 master5 \
+  --column proc_cpu_util_percent_total \
+      'CPU util (total) / %' \
+      'systemd journal CPU utilization ' 15 \
+  --subtitle 'MWST18, measured with Goeffel' \
+  --legend-loc 'upper center'
+
+```
+
+Screenshot here
+
+
+# Background and details
+
+## Prior art
 
 This was born out of a need for solid tooling. We started with [pidstat from
 sysstat](https://github.com/sysstat/sysstat/blob/master/pidstat.c), launched as
