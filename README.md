@@ -75,11 +75,17 @@ Column names:
 
 ### `goeffel-analysis magic`: quickly plot data from a single time series file
 
-```bash
-goeffel-analysis magic mwst18-master1-journal_20190801_111952.hdf5
-```
+The `goeffel-analysis magic <path-to-hdf5-file>` plots a pre-selected set of
+metrics in an opinionated way. More metrics can be added to the plot with the
+`--metric <metric-name>` option. Example:
 
-Screenshot here
+```bash
+goeffel-analysis magic \
+  mwst18-master2-mesosmaster_20190801_112136.hdf5 \
+  --metric proc_num_ip_sockets_open
+```
+Example output figure:
+![goeffel-analysis magic example output image](docs/figs/analysis_magic_example_small.png?raw=true "goeffel-analysis magic example")
 
 ### `goeffel-analysis plot`: generic plot command
 
@@ -104,6 +110,7 @@ goeffel-analysis plot \
 
 ```
 
+Example output figure:
 ![goeffel-analysis plot example output image](docs/figs/analysis_plot_example_small.png?raw=true "goeffel-analysis plot example")
 
 
