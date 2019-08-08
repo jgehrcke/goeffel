@@ -104,7 +104,7 @@ goeffel-analysis plot \
 
 ```
 
-Screenshot here
+![goeffel-analysis plot example output image](docs/figs/analysis_plot_example_small.png?raw=true "goeffel-analysis plot example")
 
 
 # Background and details
