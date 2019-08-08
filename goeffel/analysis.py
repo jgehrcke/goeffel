@@ -551,9 +551,9 @@ def plot_magic(dataframe, metadata):
         """This function can be called as a callback in response to matplotlib
         events such as a window resize event.
         """
-        plt.tight_layout(rect=[0, 0, 1, 0.97])
+        plt.tight_layout(rect=[0, 0, 1, 0.98])
         # hspace controls the _vertical_ space between subplots.
-        plt.subplots_adjust(hspace=0.019)
+        plt.subplots_adjust(hspace=0.07)
 
     custom_tight_layout_func()
 
