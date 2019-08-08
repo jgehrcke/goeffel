@@ -75,9 +75,9 @@ Column names:
 
 ### `goeffel-analysis magic`: quickly plot data from a single time series file
 
-The `goeffel-analysis magic <path-to-hdf5-file>` plots a pre-selected set of
-metrics in an opinionated way. More metrics can be added to the plot with the
-`--metric <metric-name>` option. Example:
+The `goeffel-analysis magic <path-to-hdf5-file>` command plots a pre-selected
+set of metrics in an opinionated way. More metrics can be added to the plot with
+the `--metric <metric-name>` option. Example command:
 
 ```bash
 goeffel-analysis magic \
@@ -90,7 +90,7 @@ Example output figure:
 ### `goeffel-analysis plot`: generic plot command
 
 Can be used for example for comparing multiple time series. Say you have
-monitored the same process across multiple replicas in a distributed system and
+monitored the same program across multiple replicas in a distributed system and
 would like to compare the time evolution of a certain metric across these
 replicas. Then the `goeffel-analysis plot` command is here to help, invoked with
 multiple `--series` arguments:
