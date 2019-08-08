@@ -69,7 +69,7 @@ COLUMN_PLOT_CONFIGS = {
         'plot_title': 'foo',
         'rolling_wdw_width_seconds': 0,
     },
-   'system_loadavg1': {
+    'system_loadavg1': {
         'y_label': 'System 1 min load avg',
         'plot_title': 'foo',
         'rolling_wdw_width_seconds': 0
