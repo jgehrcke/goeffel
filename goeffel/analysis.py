@@ -567,10 +567,7 @@ def plot_magic(dataframe, metadata):
 
 def plot_column_multiple_subplots(dataframe_label_pairs, column_dict):
     """
-    Create a single figure with multiple subplots. There two modes:
-
-    - each subplot comes from the same column in different dataframes (old)
-    - each subplot comes from a different column in the same dataframe (new)
+    Create a single figure with multiple subplots.
     """
 
     dataframe_count = len(dataframe_label_pairs)
@@ -580,7 +577,7 @@ def plot_column_multiple_subplots(dataframe_label_pairs, column_dict):
     # Defaults are 6.4x4.8 inches at 100 dpi, make canvas significantly larger
     # so that more details can be shown.
     fig = plt.gcf()
-    fig.set_size_inches(13, 9)
+    fig.set_size_inches(7.5, 5)
 
     # Add title and subtitle to figure.
     fig.text(
@@ -811,7 +808,7 @@ def plot_subplot(ax, column_plot_config, series, plotsettings):
 
     # Add tiny series_label label in the top-left corner of the subplot.
     ax.text(
-        0.01, 0.92,
+        0.01, 0.93,
         plotsettings['series_label'],
         verticalalignment='center',
         fontsize=8,
