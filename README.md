@@ -1,4 +1,4 @@
-# Goeffel
+# Overview
 
 Measures the resource utilization of a specific process over time.
 
@@ -7,7 +7,7 @@ makes it easy to put the process-specific metrics into context.
 
 Built for Linux. Windows and Mac OS support might come.
 
-**Highlights**:
+## Highlights
 
 - High sampling rate: by default, Goeffel uses a sampling interval of 0.5 seconds
   for making narrow spikes visible.
@@ -56,102 +56,6 @@ fundamental idea as Goeffel; it however does not have a clear separation of
 concerns between persisting the data to disk, performing the measurement itself,
 and analyzing/plotting the data.
 
-
-## Usage
-
-### Tips and tricks
-
-#### How to convert a Goeffel HDF5 file into a CSV file
-
-I recommend to de-serialize and re-serialize using
-[pandas](https://pandas.pydata.org/). Example one-liner:
-```
-python -c 'import sys; import pandas as pd; df = pd.read_hdf(sys.argv[1], key="goeffel_timeseries"); df.to_csv(sys.argv[2], index=False)' goeffel_20190718_213115.hdf5.0001 /tmp/hdf5-as-csv.csv
-```
-Note that this significantly inflates the file size (e.g., from 50 MiB to 300
-MiB).
-
-#### How to visualize and browse the contents of an HDF5 file
-
-At some point you might feel inclined to poke around in an HDF5 file created by
-Goeffel or to do custom data inspection / processing. In that case I recommend
-to use one of the various available open-source HDF5 tools for managing and
-viewing HDF5 files. One GUI tool I have frequently used is
-[ViTables](http://vitables.org/). Install it with `pip install vitables` and
-then do e.g.
-
-```text
-vitables goeffel_20190718_213115.hdf5
-```
-
-This opens a GUI which allows for browsing the tabular time series data, for
-viewing the meta data in the file, for exporting data as CSV, for querying the
-data, and various other things.
-
-#### How to do quick data analysis using IPython and pandas
-
-I recommend to start an [IPython](https://ipython.org/) REPL:
-```text
-pip install ipython  # if you have not done so yet
-ipython
-```
-Load the HDF5 file into a `pandas` data frame:
-```
-In [1]: import pandas as pd
-In [2]: df = pd.read_hdf('goeffel_timeseries__20190806_213704.hdf5', key='goeffel_timeseries')
-```
-From here you can do anything.
-
-For example, let's have a look at the mean value of the actual sampling interval
-used in this specific Goeffel time series:
-```
-In [3]: df['unixtime'].diff().mean()
-Out[3]: 0.5003192476604296
-```
-
-Or, let's see how many threads the monitored process used at most during the
-entire observation period:
-```
-In [4]: df['proc_num_threads'].max()
-Out[4]: 1
-```
-
-#### How to convert the `unixtime` column into a `pandas.DatetimeIndex`
-
-The HDF5 file contains a `unixtime` column which contains canonical Unix
-timestamp data ready to be consumed by a plethora of tools. If you are like me
-and like to use `pandas` then it is good to know how to convert this into a
-native `pandas.DateTimeIndex`:
-
-```
-In [1]: import pandas as pd
-In [2]: df = pd.read_hdf('goeffel_timeseries__20190807_174333.hdf5', key='goeffel_timeseries')
-
-# Now the data frame has an integer index.
-In [3]: type(df.index)
-Out[3]: pandas.core.indexes.numeric.Int64Index
-
-# Parse unixtime column.
-In [4]: timestamps = pd.to_datetime(df['unixtime'], unit='s')
-
-# Replace the index of the data frame.
-In [5]: df.index = timestamps
-
-# Now the data frame has a DatetimeIndex.
-In [6]: type(df.index)
-Out[6]: pandas.core.indexes.datetimes.DatetimeIndex
-
-# Let's look at some values.
-In [7]: df.index[:5]
-Out[7]:
-DatetimeIndex(['2019-08-07 15:43:33.798929930',
-               '2019-08-07 15:43:34.300590992',
-               '2019-08-07 15:43:34.801260948',
-               '2019-08-07 15:43:35.301798105',
-               '2019-08-07 15:43:35.802226067'],
-              dtype='datetime64[ns]', name='unixtime', freq=None)
-```
-
 ## Notes
 
 - Goeffel tries to not asymmetrically hide measurement uncertainty. For example,
@@ -171,7 +75,6 @@ DatetimeIndex(['2019-08-07 15:43:33.798929930',
 
 - The highest meaningful sampling rate is limited by the kernel's timer and
   bookkeeping system.
-
 
 ## Measurands
 
@@ -433,8 +336,101 @@ This is the mean over the sampling interval.
 `system_mem_inactive`
 
 
+# Tips and tricks
 
-## Valuable references
+## How to convert a Goeffel HDF5 file into a CSV file
+
+I recommend to de-serialize and re-serialize using
+[pandas](https://pandas.pydata.org/). Example one-liner:
+```
+python -c 'import sys; import pandas as pd; df = pd.read_hdf(sys.argv[1], key="goeffel_timeseries"); df.to_csv(sys.argv[2], index=False)' goeffel_20190718_213115.hdf5.0001 /tmp/hdf5-as-csv.csv
+```
+Note that this significantly inflates the file size (e.g., from 50 MiB to 300
+MiB).
+
+## How to visualize and browse the contents of an HDF5 file
+
+At some point you might feel inclined to poke around in an HDF5 file created by
+Goeffel or to do custom data inspection / processing. In that case I recommend
+to use one of the various available open-source HDF5 tools for managing and
+viewing HDF5 files. One GUI tool I have frequently used is
+[ViTables](http://vitables.org/). Install it with `pip install vitables` and
+then do e.g.
+
+```text
+vitables goeffel_20190718_213115.hdf5
+```
+
+This opens a GUI which allows for browsing the tabular time series data, for
+viewing the meta data in the file, for exporting data as CSV, for querying the
+data, and various other things.
+
+## How to do quick data analysis using IPython and pandas
+
+I recommend to start an [IPython](https://ipython.org/) REPL:
+```text
+pip install ipython  # if you have not done so yet
+ipython
+```
+Load the HDF5 file into a `pandas` data frame:
+```
+In [1]: import pandas as pd
+In [2]: df = pd.read_hdf('goeffel_timeseries__20190806_213704.hdf5', key='goeffel_timeseries')
+```
+From here you can do anything.
+
+For example, let's have a look at the mean value of the actual sampling interval
+used in this specific Goeffel time series:
+```
+In [3]: df['unixtime'].diff().mean()
+Out[3]: 0.5003192476604296
+```
+
+Or, let's see how many threads the monitored process used at most during the
+entire observation period:
+```
+In [4]: df['proc_num_threads'].max()
+Out[4]: 1
+```
+
+## How to convert the `unixtime` column into a `pandas.DatetimeIndex`
+
+The HDF5 file contains a `unixtime` column which contains canonical Unix
+timestamp data ready to be consumed by a plethora of tools. If you are like me
+and like to use `pandas` then it is good to know how to convert this into a
+native `pandas.DateTimeIndex`:
+
+```
+In [1]: import pandas as pd
+In [2]: df = pd.read_hdf('goeffel_timeseries__20190807_174333.hdf5', key='goeffel_timeseries')
+
+# Now the data frame has an integer index.
+In [3]: type(df.index)
+Out[3]: pandas.core.indexes.numeric.Int64Index
+
+# Parse unixtime column.
+In [4]: timestamps = pd.to_datetime(df['unixtime'], unit='s')
+
+# Replace the index of the data frame.
+In [5]: df.index = timestamps
+
+# Now the data frame has a DatetimeIndex.
+In [6]: type(df.index)
+Out[6]: pandas.core.indexes.datetimes.DatetimeIndex
+
+# Let's look at some values.
+In [7]: df.index[:5]
+Out[7]:
+DatetimeIndex(['2019-08-07 15:43:33.798929930',
+               '2019-08-07 15:43:34.300590992',
+               '2019-08-07 15:43:34.801260948',
+               '2019-08-07 15:43:35.301798105',
+               '2019-08-07 15:43:35.802226067'],
+              dtype='datetime64[ns]', name='unixtime', freq=None)
+```
+
+
+# Valuable references
 
 External references on the subject matter that I found useful during
 development.
