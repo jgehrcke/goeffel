@@ -124,7 +124,8 @@ def main():
         for column_dict in column_dicts:
             plot_column_multiple_subplots(dataframe_label_pairs, column_dict)
 
-        plt.show()
+        # Resizing upon `show()` to screen size is problematic as of now.
+        # plt.show()
 
 
 def parse_cmdline_args():
@@ -577,7 +578,7 @@ def plot_column_multiple_subplots(dataframe_label_pairs, column_dict):
     # Defaults are 6.4x4.8 inches at 100 dpi, make canvas significantly larger
     # so that more details can be shown.
     fig = plt.gcf()
-    fig.set_size_inches(7.5, 5)
+    fig.set_size_inches(13, 9)
 
     # Add title and subtitle to figure.
     fig.text(
