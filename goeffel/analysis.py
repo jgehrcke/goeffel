@@ -64,6 +64,11 @@ COLUMN_PLOT_CONFIGS = {
         'rolling_wdw_width_seconds': 5,
         'yscale': 'symlog'
     },
+    'proc_num_ip_sockets_open': {
+        'y_label': 'Process IP socket count',
+        'plot_title': 'foo',
+        'rolling_wdw_width_seconds': 0,
+    },
     'system_loadavg1': {
         'y_label': 'System 1 min load avg',
         'plot_title': 'foo',
@@ -124,7 +129,8 @@ def main():
         for column_dict in column_dicts:
             plot_column_multiple_subplots(dataframe_label_pairs, column_dict)
 
-        plt.show()
+        # Resizing upon `show()` to screen size is problematic as of now.
+        # plt.show()
 
 
 def parse_cmdline_args():
@@ -244,27 +250,49 @@ def parse_cmdline_args():
     ARGS = parser.parse_args()
 
 
+# Custom table attribute lookup function for compatibility with legacy files,
+# and also so that in the future we can remove goeffel_ prefixes from user
+# attribute names that are still there.
+def _gattr_maker(table_attrs):
+    def _getattr(attr):
+        prefixes = ('goeffel_', 'schniepel_', 'messer_', '')
+        for a in [prefix + attr for prefix in prefixes]:
+            if hasattr(table_attrs, a):
+                return getattr(table_attrs, a)
+        raise Exception('Cannot get attr %s from %s' % (attr, table_attrs))
+    return _getattr
+
+
 def inspect_data_file():
+
     if not os.path.isfile(ARGS.inspect_inputfile):
         sys.exit('Not a file: %s' % (ARGS.inspect_inputfile, ))
 
     import tables
 
+    keys_to_try = [
+        'goeffel_timeseries',
+        'schniepel_timeseries',
+        'messer_timeseries'
+    ]
     with tables.open_file(ARGS.inspect_inputfile, 'r') as hdf5file:
-        try:
-            table = hdf5file.root.goeffel_timeseries
-        except tables.exceptions.NoSuchNodeError:
+        for key in keys_to_try:
+            if hasattr(hdf5file.root, key):
+                table = getattr(hdf5file.root, key)
+                break
+        else:
             log.info('HDF5 file details:\n%s', hdf5file)
-            log.error('Could not find /goeffel_timeseries object. Exit.')
+            log.error('Could not find expected time series object. Exit.')
             sys.exit(1)
 
+        _gattr = _gattr_maker(table.attrs)
         print(
             f'Measurement meta data:\n'
-            f'  System hostname: {table.attrs.system_hostname}\n'
-            f'  Invocation time (local): {table.attrs.invocation_time_local}\n'
-            f'  PID command: {table.attrs.goeffel_pid_command}\n'
-            f'  PID: {table.attrs.goeffel_pid}\n'
-            f'  Sampling interval: {table.attrs.goeffel_sampling_interval_seconds} s\n'
+            f'  System hostname: {_gattr("system_hostname")}\n'
+            f'  Invocation time (local): {_gattr("invocation_time_local")}\n'
+            f'  PID command: {_gattr("pid_command")}\n'
+            f'  PID: {_gattr("pid")}\n'
+            f'  Sampling interval: {_gattr("sampling_interval_seconds")} s\n'
             # f'  Goeffel schema version: {table.attrs.goeffel_schema_version}\n'
         )
 
@@ -309,9 +337,17 @@ def cmd_magic():
 
     def get_table_metadata():
         import tables
-        # Rely on this being a valid HDF5 file.
+        keys_to_try = [
+            'goeffel_timeseries',
+            'schniepel_timeseries',
+            'messer_timeseries'
+        ]
         with tables.open_file(ARGS.datafile_for_magicplot, 'r') as hdf5file:
-            table = hdf5file.root.goeffel_timeseries
+            # Rely on this being a valid HDF5 file, one key will match.
+            for key in keys_to_try:
+                if hasattr(hdf5file.root, key):
+                    table = getattr(hdf5file.root, key)
+                    break
             table_metadata = copy.copy(table.attrs)
 
         return table_metadata
@@ -354,6 +390,8 @@ def plot_magic(dataframe, metadata):
         'system_loadavg1',
     ]
 
+    _metadata = _gattr_maker(metadata)
+
     additional_metrics = list(ARGS.metric) if ARGS.metric else []
     for m in additional_metrics:
         columns_to_plot.append(m)
@@ -392,7 +430,7 @@ def plot_magic(dataframe, metadata):
 
     fig.text(
         0.5, 0.970,
-        f'hostname: {metadata.system_hostname}, PID command: {metadata.goeffel_pid_command}',
+        f'hostname: {_metadata("system_hostname")}, PID command: {_metadata("pid_command")}',
         verticalalignment='center',
         horizontalalignment='center',
         fontsize=10,
@@ -518,9 +556,9 @@ def plot_magic(dataframe, metadata):
         """This function can be called as a callback in response to matplotlib
         events such as a window resize event.
         """
-        plt.tight_layout(rect=[0, 0, 1, 0.97])
+        plt.tight_layout(rect=[0, 0, 1, 0.98])
         # hspace controls the _vertical_ space between subplots.
-        plt.subplots_adjust(hspace=0.019)
+        plt.subplots_adjust(hspace=0.07)
 
     custom_tight_layout_func()
 
@@ -535,10 +573,7 @@ def plot_magic(dataframe, metadata):
 
 def plot_column_multiple_subplots(dataframe_label_pairs, column_dict):
     """
-    Create a single figure with multiple subplots. There two modes:
-
-    - each subplot comes from the same column in different dataframes (old)
-    - each subplot comes from a different column in the same dataframe (new)
+    Create a single figure with multiple subplots.
     """
 
     dataframe_count = len(dataframe_label_pairs)
@@ -779,7 +814,7 @@ def plot_subplot(ax, column_plot_config, series, plotsettings):
 
     # Add tiny series_label label in the top-left corner of the subplot.
     ax.text(
-        0.01, 0.92,
+        0.01, 0.93,
         plotsettings['series_label'],
         verticalalignment='center',
         fontsize=8,
@@ -805,12 +840,25 @@ def parse_hdf5file_into_dataframe(
     # is, using `start` and `stop` may only save about that much (1-2 seconds)
     # of processing time and a bit of memory. That is, this technique only
     # becomes meaningful for O(GB)-sized (compressed) HDF5 files.
-    df = pd.read_hdf(
-        filepath,
-        key='goeffel_timeseries',
-        # start=startrow,
-        # stop=stoprow,
-    )
+    keys_to_try = [
+        'goeffel_timeseries',
+        'schniepel_timeseries',
+        'messer_timeseries'
+    ]
+    for k in keys_to_try:
+        try:
+            df = pd.read_hdf(
+                filepath, key=k,
+                # start=startrow,
+                # stop=stoprow,
+            )
+        except KeyError:
+            log.debug('Did not find key in HDF5 file: %s', k)
+        else:
+            break
+    else:
+        log.error('HDF5 file does not contain any of: %s', keys_to_try)
+        sys.exit(1)
 
     # Parse Unix timestamps into a `pandas.DateTimeIndex` object and replace the
     # DataFrame's index (integers) with the new one.

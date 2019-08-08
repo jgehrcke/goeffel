@@ -1253,7 +1253,8 @@ class SampleGenerator:
             # request rate, is the _merged_ read or write request rate (the
             # kernel attempts to merge individual user space requests before
             # passing them to the hardware). For non-random I/O patterns this
-            # greatly reduces the of individual reads and writes issued to disk.
+            # greatly reduces the number of individual reads and writes issued
+            # to disk.
             sampledict['disk_' + mdev + '_merged_write_rate_hz'] = \
                 (s2[dev].write_merged_count - s1[dev].write_merged_count) / delta_t
             sampledict['disk_' + mdev + '_merged_read_rate_hz'] = \
