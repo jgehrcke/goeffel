@@ -38,6 +38,8 @@ Convenient, right?
 
 ## `goeffel`: data acquisition
 
+
+
 ## `goeffel-analysis`: data inspection and visualization
 
 **Note**: `goeffel-analysis` provides an opinionated and limited approach to
@@ -141,9 +143,9 @@ persisting the collected time series data on disk for later inspection.
 
 The program [psrecord](https://github.com/astrofrog/psrecord) (which effectively
 wraps [psutil](https://psutil.readthedocs.io/en/latest/)) has a similar
-fundamental idea as Goeffel; it however does not have a clear separation of
-concerns between persisting the data to disk, performing the measurement itself,
-and analyzing/plotting the data.
+fundamental approach as Goeffel; it however only , and
+it does not have a clear separation of concerns between persisting the data to
+disk, performing the measurement itself, and analyzing/plotting the data.
 
 ## Technical notes
 
