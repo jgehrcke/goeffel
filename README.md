@@ -38,7 +38,53 @@ Convenient, right?
 
 ## `goeffel`: data acquisition
 
+Simply invoke goeffel with the `--pid <pid>` argument if the process ID of the
+target process is known. In this mode `goeffel` stops measurement and terminates
+itself once the process with the given ID goes away. Example:
 
+```text
+$ goeffel --pid 29019
+
+[... snip ...]
+
+190809-15:46:57.914 INFO: Updated HDF5 file: wrote 20 sample(s) in 0.01805 s
+
+[... snip ...]
+
+190809-15:56:13.842 INFO: Cannot inspect process: process no longer exists (pid=29019)
+190809-15:56:13.843 INFO: Wait for producer buffer to become empty
+190809-15:56:13.843 INFO: Wait for consumer process to terminate
+190809-15:56:13.854 INFO: Updated HDF5 file: wrote 13 sample(s) in 0.01077 s
+190809-15:56:13.856 INFO: Sample consumer process terminated
+```
+
+
+For measuring beyond the process lifetime use `--pid-command <command>`, as in
+this example:
+
+```text
+$ goeffel --pid-command 'pgrep stress --newest'
+
+[... snip ...]
+
+190809-15:47:47.337 INFO: New process ID from PID command: 25890
+190809-15:47:47.840 INFO: Create HDF5 file: ./goeffel_timeseries__20190809_154747.hdf5
+190809-15:47:47.860 INFO: Updated HDF5 file: wrote 1 sample(s) in 0.02033 s
+190809-15:47:57.863 INFO: Updated HDF5 file: wrote 20 sample(s) in 0.01805 s
+190809-15:48:06.850 INFO: Cannot inspect process: process no longer exists (pid=25890)
+190809-15:48:06.859 INFO: PID command returned non-zero
+
+[... snip ...]
+
+190809-15:48:09.916 INFO: PID command returned non-zero
+190809-15:48:10.926 INFO: New process ID from PID command: 28086
+190809-15:48:12.438 INFO: Updated HDF5 file: wrote 20 sample(s) in 0.01013 s
+190809-15:48:22.446 INFO: Updated HDF5 file: wrote 20 sample(s) in 0.01062 s
+
+[... snip ...]
+```
+`<command>` is expected to return a single process ID on stdout. In this mode
+`goeffel` runs forever until manually terminated via `SIGINT` or `SIGTERM`.
 
 ## `goeffel-analysis`: data inspection and visualization
 
@@ -57,7 +103,7 @@ Use `goeffel-analysis inspect <path-to-HDF5-file>` for inspecting the contents
 of a Goeffel HDF5 file. Example:
 
 ```text
-goeffel-analysis inspect mwst18-master1-journal_20190801_111952.hdf5
+$ goeffel-analysis inspect mwst18-master1-journal_20190801_111952.hdf5
 Measurement meta data:
   System hostname: int-master1-mwt18.scaletesting.mesosphe.re
   Invocation time (local): 20190801_111952
@@ -102,7 +148,7 @@ replicas. Then the `goeffel-analysis plot` command is here to help, invoked with
 multiple `--series` arguments:
 
 ```bash
-goeffel-analysis plot \
+$ goeffel-analysis plot \
   --series mwst18-master1-journal_20190801_111952.hdf5 master1 \
   --series mwst18-master2-journal_20190801_112136.hdf5 master2 \
   --series mwst18-master3-journal_20190801_112141.hdf5 master3 \
