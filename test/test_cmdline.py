@@ -55,7 +55,7 @@ def testprocess():
 
 
 def test_simple_invocation(clitest, testprocess):
-    clitest.run(f"goeffel --pid {testprocess.pid}")
+    clitest.run(f"goeffel --pid {testprocess.pid} --terminate-after-n-samples 1")
 
 
 def test_a_number_of_features(clitest, testprocess):
