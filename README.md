@@ -7,28 +7,24 @@ makes it easy to put the process-specific metrics into context.
 
 Built for Linux. Windows and Mac OS support might come.
 
+For a list of the currently supported metrics see [below](#measurands).
+
 ## Highlights
 
-- High sampling rate: by default, Goeffel uses a sampling interval of 0.5 seconds
-  for making narrow spikes visible.
-- Goeffel is built for monitoring a program subject to process ID changes. This
-  is useful for longevity experiments when the monitored process occasionaly
-  restarts (for instance as of fail-over scenarios).
-- Goeffel can run unsupervised and infinitely long with predictable disk space
-  requirements (it applies an output file rotation and retention policy).
-- Goeffel helps keeping data organized: time series data is written into
+- High sampling rate: the default sampling interval of `0.5 s` makes narrow
+  spikes visible.
+- Can monitor a program subject to process ID changes (useful for longevity
+  experiments where the monitored process occasionally restarts, for instance as
+  of fail-over scenarios).
+- Can run unsupervised with predictable disk space requirements (applies an
+  output file rotation and retention policy).
+- Helps keeping data organized: time series data is written into
   [HDF5](https://en.wikipedia.org/wiki/Hierarchical_Data_Format) files, and
   annotated with relevant metadata such as the program invocation time, system
   hostname, and Goeffel software version.
-- Goeffel comes with a data plotting tool (separate from the data acquisition
-  program).
-- Goeffel values measurement correctness very highly. The core sampling loop does
-  little work besides the measurement itself: it writes each sample to a queue.
-  A separate process consumes this queue and persists the time series data to
-  disk, for later inspection. This keeps the sampling rate predictable upon disk
-  write latency spikes, or generally upon backpressure. This matters especially
-  in cloud environments where we sometimes see fsync latencies of multiple
-  seconds.
+- Comes with a data plotting tool separate from the data acquisition program.
+- Values measurement correctness very highly (see [technical
+  notes](#technical-notes)).
 
 # CLI usage
 
