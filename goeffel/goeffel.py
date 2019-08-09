@@ -91,9 +91,7 @@ HDF5_SERIES_SIZE_MAX_MiB = 500
 # corruption, risk of losing progress).
 HDF5_SAMPLE_WRITE_BATCH_SIZE = 20
 
-CSV_COLUMN_HEADER_WRITTEN = False
 OUTFILE_PATH_HDF5 = None
-OUTFILE_PATH_CSV = None
 
 # Will be populated by ArgumentParser, with options from the command line.
 ARGS = None
@@ -329,9 +327,6 @@ def process_cmdline_args():
         help='Quit program after acquiring N samples.'
         )
 
-    # TODO: make it so that at least one output file method is defined.
-    # maybe: require HDF5 to work.
-    # TODO: enable optional CSV output, in  addition.
     parser.add_argument(
         '--hdf5-path-prefix',
         metavar='PATH_PREFIX',
@@ -343,34 +338,6 @@ def process_cmdline_args():
     )
     parser.add_argument(
         '--outfile-hdf5-path',
-        metavar='PATH',
-        default=None,
-        help='Use that if full control over HDF5 file path is required.'
-    )
-    parser.add_argument(
-        '--no-hdf5',
-        action='store_true',
-        default=False,
-        help='Disable writing to an HDF5 output file (default: enabled).'
-    )
-
-    parser.add_argument(
-        '--enable-csv',
-        action='store_true',
-        default=False,
-        help='Enable writing to a CSV output file (default: disabled).'
-    )
-    parser.add_argument(
-        '--csv-path-prefix',
-        metavar='PATH_PREFIX',
-        default='./goeffel_timeseries_',
-        help=(
-            'Change the default CSV file path prefix. Suffix contains '
-            'invocation time and file extension.'
-        )
-    )
-    parser.add_argument(
-        '--outfile-csv-path',
         metavar='PATH',
         default=None,
         help='Use that if full control over HDF5 file path is required.'
@@ -413,40 +380,14 @@ def _process_cmdline_args_advanced():
     def _process_outfile_args():
 
         # Determine path for HDF5 output file. `None` signals to not write one.
-        if ARGS.no_hdf5:
-            path_hdf5 = None
-        elif ARGS.outfile_hdf5_path:
+        if ARGS.outfile_hdf5_path:
             path_hdf5 = ARGS.outfile_hdf5_path
         else:
             path_hdf5 = f'{ARGS.hdf5_path_prefix}_{INVOCATION_TIME_LOCAL_STRING}.hdf5'
 
-        # Determine path for CSV output file. `None` signals to not write one.
-        if not ARGS.enable_csv:
-            path_csv = None
-        elif ARGS.outfile_csv_path:
-            path_csv = ARGS.outfile_csv_path
-        else:
-            path_csv = f'{ARGS.csv_path_prefix}_{INVOCATION_TIME_LOCAL_STRING}.csv'
-
-        if path_hdf5:
-            if os.path.exists(path_hdf5):
-                sys.exit(f'Error: path exists: {path_hdf5}')
-            log.info(f'Will write data file {path_hdf5}')
-
-        if path_csv:
-            if os.path.exists(path_csv):
-                sys.exit(f'Error: path exists: {path_csv}')
-            log.info(f'Will write data file {path_csv}')
-
-        if path_csv:
-            # TODO(JP): properly validate / test CSV output.
-            raise NotImplementedError
-
         # Expose config to the rest of the program.
         global OUTFILE_PATH_HDF5
-        global OUTFILE_PATH_CSV
         OUTFILE_PATH_HDF5 = path_hdf5
-        OUTFILE_PATH_CSV = path_csv
 
     def _process_diskstats_args():
 
@@ -621,8 +562,6 @@ class SampleConsumerProcess(multiprocessing.Process):
             # import random
             # time.sleep(random.randint(1, 10) / 30.0)
 
-            self._write_sample_csv_if_enabled(sample)
-
             # Always write very first sample immediately so that writing the
             # HDF5 file fails fast (if it fails, instead of failing only after
             # collecting the first N samples).
@@ -678,18 +617,6 @@ class SampleConsumerProcess(multiprocessing.Process):
         hdf5table.attrs.goeffel_sampling_interval_seconds = ARGS.sampling_interval
         hdf5table.attrs.goeffel_file_series_index = HDF5_FILE_SERIES_INDEX
         hdf5file.close()
-
-    def _prepare_csv_file_if_not_yet_existing(self):
-
-        if os.path.exists(OUTFILE_PATH_CSV):
-            return
-
-        log.info('Create CSV file: %s', OUTFILE_PATH_CSV)
-        with open(OUTFILE_PATH_CSV, 'wb') as f:
-            f.write(b'# goeffel_timeseries\n')
-            f.write(b'# %s\n' (INVOCATION_TIME_LOCAL_STRING, ))
-            f.write(b'# system hostname: %s\n' (get_hostname(), ))
-            f.write(b'# schema version: %s\n' (GOEFFEL_SAMPLE_SCHEMA_VERSION, ))
 
     def _hdf5_file_rotate_if_required(self):
         # During the first iteration the file does not yet exist.
@@ -855,38 +782,6 @@ class SampleConsumerProcess(multiprocessing.Process):
             len(samples),
             time.monotonic() - t0,
         )
-
-    def _write_sample_csv_if_enabled(self, sample):
-        global CSV_COLUMN_HEADER_WRITTEN
-
-        if OUTFILE_PATH_CSV is None:
-            # That *is* the signal to not write a CSV output file.
-            return
-
-        self._prepare_csv_file_if_not_yet_existing()
-
-        samplevalues = tuple(v for k, v in sample.items())
-
-        # Apply a bit of custom formatting.
-        # Note(JP): store these format strings closer to the column listing,
-        # and assemble a format string dynamically.
-        csv_sample_row = (
-            '%.6f, %s, %5.2f, %5.2f, %5.2f, '
-            '%d, %d, %d, %d, %d, %d, %d, %d, %d, '
-            '%d, %5.2f, %5.2f, %5.2f, %d, %d, %d, %d, %d, %d\n' % samplevalues
-        )
-
-        with open(OUTFILE_PATH_CSV, 'a') as f:
-
-            # Write the column header to the CSV file if not yet done. Do that
-            # here so that the column names can be explicitly read from an
-            # (ordered) sample dicitionary.
-            if not CSV_COLUMN_HEADER_WRITTEN:
-                f.write(
-                    ','.join(k for k in sample.keys()).encode('ascii') + b'\n')
-                CSV_COLUMN_HEADER_WRITTEN = True
-
-            f.write(csv_sample_row.encode('ascii'))
 
 
 class SampleGenerator:
