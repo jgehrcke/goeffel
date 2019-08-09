@@ -137,7 +137,14 @@ fundamental idea as Goeffel; it however does not have a clear separation of
 concerns between persisting the data to disk, performing the measurement itself,
 and analyzing/plotting the data.
 
-## Notes
+## Technical notes
+
+- The core sampling loop does little work besides the measurement itself: it
+  writes each sample to a queue. A separate process consumes this queue and
+  persists the time series data to disk, for later inspection. This keeps the
+  sampling rate predictable upon disk write latency spikes, or generally upon
+  backpressure. This matters especially in cloud environments where we sometimes
+  see fsync latencies of multiple seconds.
 
 - Goeffel tries to not asymmetrically hide measurement uncertainty. For example,
   you might see it measure a CPU utilization of a single-threaded process
@@ -147,7 +154,7 @@ and analyzing/plotting the data.
   theory not exceed a certain threshold
   ([example](https://github.com/sysstat/sysstat/commit/52977c479d3de1cb2535f896273d518326c26722)).
 
-- Must be run with `root` privileges.
+- `goeffel` must be run with `root` privileges.
 
 - The value `-1` has a special meaning for some metrics
   ([NaN](https://en.wikipedia.org/wiki/NaN), which cannot be represented
@@ -157,7 +164,7 @@ and analyzing/plotting the data.
 - The highest meaningful sampling rate is limited by the kernel's timer and
   bookkeeping system.
 
-## Measurands
+# Measurands
 
 [Measurand](https://en.wiktionary.org/wiki/measurand) is a word! This section
 attempts to describe the individual data columns ("metrics"), their units, and
