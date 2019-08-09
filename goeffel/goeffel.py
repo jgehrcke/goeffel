@@ -305,12 +305,18 @@ def process_cmdline_args():
     what.add_argument(
         '--pid-command',
         metavar='\'PID COMMAND\'',
-        help='A shell command expected to return a single process ID on stdout.'
+        help=(
+            'Run forever. Once the shell command returns a single process ID '
+            'on stdout that very process is being monitored.'
+        )
     )
     what.add_argument(
         '--pid',
-        metavar='PROCESSID',
-        help='A process ID.'
+        metavar='PROCESS_ID',
+        help=(
+            'Monitor the process with that ID. Requires this process to exist. '
+            'Terminate once the process goes away.'
+        )
     )
 
     parser.add_argument(
@@ -332,7 +338,8 @@ def process_cmdline_args():
         metavar='PATH_PREFIX',
         default='./goeffel_timeseries_',
         help=(
-            'Change the default HDF5 file path prefix. Suffix contains '
+            'Change the HDF5 file path prefix. Default is '
+            './goeffel_timeseries_. Suffix is built automatically and contains '
             'invocation time and file extension.'
         )
     )
@@ -340,7 +347,7 @@ def process_cmdline_args():
         '--outfile-hdf5-path',
         metavar='PATH',
         default=None,
-        help='Use that if full control over HDF5 file path is required.'
+        help='Use that if full control over the HDF5 file path is required.'
     )
 
     parser.add_argument(
