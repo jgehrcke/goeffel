@@ -2,12 +2,19 @@
 
 Measures the resource utilization of a specific process over time.
 
-Also measures the utilization / saturation of system-wide resources:
-makes it easy to put the process-specific metrics into context.
+Also measures the utilization / saturation of system-wide resources: this helps
+putting the process-specific metrics into context.
 
 Built for Linux. Windows and Mac OS support might come.
 
 For a list of the currently supported metrics see [below](#measurands).
+
+The name, [Göffel](https://de.wikipedia.org/wiki/Essbesteck#Mischformen), is the
+German version of [spork](https://en.wikipedia.org/wiki/Spork):
+
+![image of a spork](docs/figs/spork.jpg?raw=true "image of spork / Göffel")
+
+Convenient, right?
 
 ## Highlights
 
@@ -16,8 +23,8 @@ For a list of the currently supported metrics see [below](#measurands).
 - Can monitor a program subject to process ID changes (useful for longevity
   experiments where the monitored process occasionally restarts, for instance as
   of fail-over scenarios).
-- Can run unsupervised with predictable disk space requirements (applies an
-  output file rotation and retention policy).
+- Is meant to run unsupervised. Has predictable disk space requirements (output
+  file rotation and retention policy).
 - Helps keeping data organized: time series data is written into
   [HDF5](https://en.wikipedia.org/wiki/Hierarchical_Data_Format) files, and
   annotated with relevant metadata such as the program invocation time, system
@@ -25,6 +32,7 @@ For a list of the currently supported metrics see [below](#measurands).
 - Comes with a data plotting tool separate from the data acquisition program.
 - Values measurement correctness very highly (see [technical
   notes](#technical-notes)).
+
 
 # CLI usage
 
