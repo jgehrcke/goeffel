@@ -54,6 +54,10 @@ def testprocess():
         log.info('Test process terminated cleanly')
 
 
+def test_simple_invocation(clitest, testprocess):
+    clitest.run(f"goeffel --pid {testprocess.pid}")
+
+
 def test_a_number_of_features(clitest, testprocess):
     clitest.run(
         f"goeffel --pid-command 'echo {testprocess.pid}' "

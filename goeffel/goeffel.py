@@ -500,7 +500,7 @@ def _process_cmdline_args_advanced():
             ARGS.pid = start_trial_process()
 
         try:
-            int(ARGS.pid)
+            ARGS.pid = int(ARGS.pid)
         except ValueError:
             sys.exit('The value provided to --pid must be an integer')
 
