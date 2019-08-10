@@ -2,37 +2,89 @@
 
 Measures the resource utilization of a specific process over time.
 
-Also measures the utilization / saturation of system-wide resources:
-makes it easy to put the process-specific metrics into context.
+Also measures the utilization / saturation of system-wide resources: this helps
+putting the process-specific metrics into context.
 
 Built for Linux. Windows and Mac OS support might come.
 
+For a list of the currently supported metrics see [below](#measurands).
+
+The name, [Göffel](https://de.wikipedia.org/wiki/Essbesteck#Mischformen), is the
+German version of [spork](https://en.wikipedia.org/wiki/Spork):
+
+![image of a spork](docs/figs/spork.jpg?raw=true "image of spork / Göffel")
+
+Convenient, right?
+
 ## Highlights
 
-- High sampling rate: by default, Goeffel uses a sampling interval of 0.5 seconds
-  for making narrow spikes visible.
-- Goeffel is built for monitoring a program subject to process ID changes. This
-  is useful for longevity experiments when the monitored process occasionaly
-  restarts (for instance as of fail-over scenarios).
-- Goeffel can run unsupervised and infinitely long with predictable disk space
-  requirements (it applies an output file rotation and retention policy).
-- Goeffel helps keeping data organized: time series data is written into
+- High sampling rate: the default sampling interval of `0.5 s` makes narrow
+  spikes visible.
+- Can monitor a program subject to process ID changes (useful for longevity
+  experiments where the monitored process occasionally restarts, for instance as
+  of fail-over scenarios).
+- Is meant to run unsupervised. Has predictable disk space requirements (output
+  file rotation and retention policy).
+- Helps keeping data organized: time series data is written into
   [HDF5](https://en.wikipedia.org/wiki/Hierarchical_Data_Format) files, and
   annotated with relevant metadata such as the program invocation time, system
   hostname, and Goeffel software version.
-- Goeffel comes with a data plotting tool (separate from the data acquisition
-  program).
-- Goeffel values measurement correctness very highly. The core sampling loop does
-  little work besides the measurement itself: it writes each sample to a queue.
-  A separate process consumes this queue and persists the time series data to
-  disk, for later inspection. This keeps the sampling rate predictable upon disk
-  write latency spikes, or generally upon backpressure. This matters especially
-  in cloud environments where we sometimes see fsync latencies of multiple
-  seconds.
+- Comes with a data plotting tool separate from the data acquisition program.
+- Values measurement correctness very highly (see [technical
+  notes](#technical-notes)).
+
 
 # CLI usage
 
 ## `goeffel`: data acquisition
+
+Simply invoke goeffel with the `--pid <pid>` argument if the process ID of the
+target process is known. In this mode `goeffel` stops measurement and terminates
+itself once the process with the given ID goes away. Example:
+
+```text
+$ goeffel --pid 29019
+
+[... snip ...]
+
+190809-15:46:57.914 INFO: Updated HDF5 file: wrote 20 sample(s) in 0.01805 s
+
+[... snip ...]
+
+190809-15:56:13.842 INFO: Cannot inspect process: process no longer exists (pid=29019)
+190809-15:56:13.843 INFO: Wait for producer buffer to become empty
+190809-15:56:13.843 INFO: Wait for consumer process to terminate
+190809-15:56:13.854 INFO: Updated HDF5 file: wrote 13 sample(s) in 0.01077 s
+190809-15:56:13.856 INFO: Sample consumer process terminated
+```
+
+
+For measuring beyond the process lifetime use `--pid-command <command>`, as in
+this example:
+
+```text
+$ goeffel --pid-command 'pgrep stress --newest'
+
+[... snip ...]
+
+190809-15:47:47.337 INFO: New process ID from PID command: 25890
+190809-15:47:47.840 INFO: Create HDF5 file: ./goeffel_timeseries__20190809_154747.hdf5
+190809-15:47:47.860 INFO: Updated HDF5 file: wrote 1 sample(s) in 0.02033 s
+190809-15:47:57.863 INFO: Updated HDF5 file: wrote 20 sample(s) in 0.01805 s
+190809-15:48:06.850 INFO: Cannot inspect process: process no longer exists (pid=25890)
+190809-15:48:06.859 INFO: PID command returned non-zero
+
+[... snip ...]
+
+190809-15:48:09.916 INFO: PID command returned non-zero
+190809-15:48:10.926 INFO: New process ID from PID command: 28086
+190809-15:48:12.438 INFO: Updated HDF5 file: wrote 20 sample(s) in 0.01013 s
+190809-15:48:22.446 INFO: Updated HDF5 file: wrote 20 sample(s) in 0.01062 s
+
+[... snip ...]
+```
+`<command>` is expected to return a single process ID on stdout. In this mode
+`goeffel` runs forever until manually terminated via `SIGINT` or `SIGTERM`.
 
 ## `goeffel-analysis`: data inspection and visualization
 
@@ -51,7 +103,7 @@ Use `goeffel-analysis inspect <path-to-HDF5-file>` for inspecting the contents
 of a Goeffel HDF5 file. Example:
 
 ```text
-goeffel-analysis inspect mwst18-master1-journal_20190801_111952.hdf5
+$ goeffel-analysis inspect mwst18-master1-journal_20190801_111952.hdf5
 Measurement meta data:
   System hostname: int-master1-mwt18.scaletesting.mesosphe.re
   Invocation time (local): 20190801_111952
@@ -96,7 +148,7 @@ replicas. Then the `goeffel-analysis plot` command is here to help, invoked with
 multiple `--series` arguments:
 
 ```bash
-goeffel-analysis plot \
+$ goeffel-analysis plot \
   --series mwst18-master1-journal_20190801_111952.hdf5 master1 \
   --series mwst18-master2-journal_20190801_112136.hdf5 master2 \
   --series mwst18-master3-journal_20190801_112141.hdf5 master3 \
@@ -137,11 +189,18 @@ persisting the collected time series data on disk for later inspection.
 
 The program [psrecord](https://github.com/astrofrog/psrecord) (which effectively
 wraps [psutil](https://psutil.readthedocs.io/en/latest/)) has a similar
-fundamental idea as Goeffel; it however does not have a clear separation of
-concerns between persisting the data to disk, performing the measurement itself,
-and analyzing/plotting the data.
+fundamental approach as Goeffel; it however only , and
+it does not have a clear separation of concerns between persisting the data to
+disk, performing the measurement itself, and analyzing/plotting the data.
 
-## Notes
+## Technical notes
+
+- The core sampling loop does little work besides the measurement itself: it
+  writes each sample to a queue. A separate process consumes this queue and
+  persists the time series data to disk, for later inspection. This keeps the
+  sampling rate predictable upon disk write latency spikes, or generally upon
+  backpressure. This matters especially in cloud environments where we sometimes
+  see fsync latencies of multiple seconds.
 
 - Goeffel tries to not asymmetrically hide measurement uncertainty. For example,
   you might see it measure a CPU utilization of a single-threaded process
@@ -151,7 +210,7 @@ and analyzing/plotting the data.
   theory not exceed a certain threshold
   ([example](https://github.com/sysstat/sysstat/commit/52977c479d3de1cb2535f896273d518326c26722)).
 
-- Must be run with `root` privileges.
+- `goeffel` must be run with `root` privileges.
 
 - The value `-1` has a special meaning for some metrics
   ([NaN](https://en.wikipedia.org/wiki/NaN), which cannot be represented
@@ -161,7 +220,7 @@ and analyzing/plotting the data.
 - The highest meaningful sampling rate is limited by the kernel's timer and
   bookkeeping system.
 
-## Measurands
+# Measurands
 
 [Measurand](https://en.wiktionary.org/wiki/measurand) is a word! This section
 attempts to describe the individual data columns ("metrics"), their units, and

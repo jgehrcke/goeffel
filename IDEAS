@@ -37,7 +37,6 @@
 
 ## Docs
 
-- Explain name, show Göffel, spork
 - Add note about alpha/beta software, that the CLI in particular may be subject
   to change.
 
@@ -68,10 +67,6 @@
 
 - Add option to not measure IP connections? Can be CPU costly. Measure/compare.
   Does this matter?
-
-- Noticed during development: using `stress` and `pgrep gnome-shell` is nice
-  and all, but maybe: add a test process functionality into Goeffel itself so
-  that playing with it on the command line is easy?
 
 - On a loaded system profile goeffel and see where it spends its time.
   Pops up in top with 6 % CPU utilization. A quick `perf top` on the
