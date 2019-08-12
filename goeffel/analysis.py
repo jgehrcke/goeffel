@@ -254,12 +254,16 @@ def parse_cmdline_args():
 # and also so that in the future we can remove goeffel_ prefixes from user
 # attribute names that are still there.
 def _gattr_maker(table_attrs):
-    def _getattr(attr):
+    def _getattr(attr, strict=True):
         prefixes = ('goeffel_', 'schniepel_', 'messer_', '')
         for a in [prefix + attr for prefix in prefixes]:
             if hasattr(table_attrs, a):
                 return getattr(table_attrs, a)
-        raise Exception('Cannot get attr %s from %s' % (attr, table_attrs))
+        if strict:
+            raise Exception('Cannot get attr %s from %s' % (attr, table_attrs))
+        else:
+            # Do not crash, return a meaningful placeholder.
+            return None
     return _getattr
 
 
@@ -288,11 +292,13 @@ def inspect_data_file():
         _gattr = _gattr_maker(table.attrs)
         print(
             f'Measurement meta data:\n'
+            f'  Created with: Goeffel {_gattr("software_version", strict=False)}\n'
             f'  System hostname: {_gattr("system_hostname")}\n'
             f'  Invocation time (local): {_gattr("invocation_time_local")}\n'
             f'  PID command: {_gattr("pid_command")}\n'
             f'  PID: {_gattr("pid")}\n'
             f'  Sampling interval: {_gattr("sampling_interval_seconds")} s\n'
+            f'  Label: {_gattr("custom_label", strict=False)}\n'
             # f'  Goeffel schema version: {table.attrs.goeffel_schema_version}\n'
         )
 
