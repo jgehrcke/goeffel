@@ -10,30 +10,15 @@
 - allow for emitting data into a metrics pipeline via network (statsd, ...)
 
 
-## File management
-
-- File management in general: prevent accidental concurrent write access.
-  Example scenario: goeffel started twice with default args in the same second.
-  File locking?
-
-
 ## goeffel-analysis
 
-- For the magic plot allow for a non-interactive mode which only writes to disk.
-
 - control log level with command line flag
-
-- make non-interactive mode default because of the figure size issue:
-  https://github.com/matplotlib/matplotlib/issues/7338
-  Write PDF and PNG by default.
 
 
 ## Ideas for walk-through / tutorial / blog:
 
 - Show how PID command picks up new PID
-- Show inspect
-- Show magic
-- Show non-interactive magic, writing PNG file
+
 
 ## Docs
 
@@ -67,6 +52,10 @@
 
 - Allow for installing `goefel` w/o the depdencies required solely for
   `goeffel-analysis`.
+
+- non-interactive mode is default because of the figure size issue:
+  https://github.com/matplotlib/matplotlib/issues/7338 Write PNG by default.
+  Writing PDF is not really an option w/o thinning out data.
 
 - Add option to not measure IP connections? Can be CPU costly. Measure/compare.
   Does this matter?
