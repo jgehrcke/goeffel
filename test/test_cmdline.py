@@ -115,8 +115,11 @@ def test_analysis_inspect(clitest, testprocess):
     clitest.run(
         f"goeffel --pid {testprocess.pid} -i 0.3 -t 1 --outfile-hdf5-path out.hdf5"
     )
-
     clitest.run(
         f"goeffel-analysis inspect out.hdf5"
     )
-
+    clitest.assert_in_stdout([
+        'Created with: Goeffel',
+        'Table properties:',
+        'Column names:'
+    ])
