@@ -9,6 +9,10 @@ Renamed to Goeffel.
 - Add `monotime` metric.
 - Fix bug as of which every Nth sample was not emitted to the output file.
 - Add `trialprocess` gimmick.
+- Command line interface cleanup, among others:
+    - Add `-i` short option (for `--sampling-interval`).
+    - Add `--label` option.
+    - Improve help text.
 
 `goeffel-analysis`:
 
