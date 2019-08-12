@@ -54,12 +54,48 @@ def testprocess():
         log.info('Test process terminated cleanly')
 
 
-def test_simple_invocation(clitest, testprocess):
-    clitest.run(f"goeffel --pid {testprocess.pid} --terminate-after-n-samples 1")
+def test_pid(clitest, testprocess):
+    clitest.run(f"goeffel --pid {testprocess.pid} --terminate-after-n 1")
+
+def test_pid_command_simple(clitest, testprocess):
+    clitest.run(f"goeffel --pid-command 'echo {testprocess.pid}' --terminate-after-n 1")
 
 
-def test_a_number_of_features(clitest, testprocess):
+def test_hdf5_path_prefix_default(clitest, testprocess):
+    clitest.run(f"goeffel --pid {testprocess.pid} -i 0.3 --terminate-after-n 1")
+    clitest.expect_filename_pattern(
+        r'^goeffel-timeseries__[0-9]+_[0-9]+\.hdf5$')
+
+
+def test_hdf5_path_with_label(clitest, testprocess):
+    clitest.run(
+        f"goeffel --pid {testprocess.pid} -i 0.3 --terminate-after-n 1 "
+        "--label custom-label"
+    )
+    clitest.expect_filename_pattern(
+        r'^goeffel-timeseries_custom-label_[0-9]+_[0-9]+\.hdf5$')
+
+
+def test_hdf5_path_prefix_custom(clitest, testprocess):
+    clitest.run(
+        f"goeffel --pid {testprocess.pid} -i 0.3 --terminate-after-n 1 "
+        "--outfile-hdf5-path-prefix custom_prefix"
+    )
+    clitest.expect_filename_pattern(
+        r'^custom_prefix__[0-9]+_[0-9]+\.hdf5$')
+
+
+def test_hdf5_path_prefix_custom_and_label(clitest, testprocess):
+    clitest.run(
+        f"goeffel --pid {testprocess.pid} -i 0.3 --terminate-after-n 1 "
+        "--outfile-hdf5-path-prefix custom_prefix --label custom-label"
+    )
+    clitest.expect_filename_pattern(
+        r'^custom_prefix_custom-label_[0-9]+_[0-9]+\.hdf5$')
+
+
+def test_a_number_of_features_together(clitest, testprocess):
     clitest.run(
         f"goeffel --pid-command 'echo {testprocess.pid}' "
-        "--diskstats sda --sampling-interval 0.3 --terminate-after-n-samples 1"
+        "--diskstats sda --sampling-interval 0.3 --terminate-after-n 1"
     )
