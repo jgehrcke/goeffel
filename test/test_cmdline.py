@@ -55,21 +55,21 @@ def testprocess():
 
 
 def test_pid(clitest, testprocess):
-    clitest.run(f"goeffel --pid {testprocess.pid} --terminate-after-n 1")
+    clitest.run(f"goeffel --pid {testprocess.pid} -t 1")
 
 def test_pid_command_simple(clitest, testprocess):
-    clitest.run(f"goeffel --pid-command 'echo {testprocess.pid}' --terminate-after-n 1")
+    clitest.run(f"goeffel --pid-command 'echo {testprocess.pid}' -t 1")
 
 
 def test_hdf5_path_prefix_default(clitest, testprocess):
-    clitest.run(f"goeffel --pid {testprocess.pid} -i 0.3 --terminate-after-n 1")
+    clitest.run(f"goeffel --pid {testprocess.pid} -i 0.3 -t 1")
     clitest.expect_filename_pattern(
         r'^goeffel-timeseries__[0-9]+_[0-9]+\.hdf5$')
 
 
 def test_hdf5_path_with_label(clitest, testprocess):
     clitest.run(
-        f"goeffel --pid {testprocess.pid} -i 0.3 --terminate-after-n 1 "
+        f"goeffel --pid {testprocess.pid} -i 0.3 -t 1 "
         "--label custom-label"
     )
     clitest.expect_filename_pattern(
@@ -78,7 +78,7 @@ def test_hdf5_path_with_label(clitest, testprocess):
 
 def test_hdf5_path_prefix_custom(clitest, testprocess):
     clitest.run(
-        f"goeffel --pid {testprocess.pid} -i 0.3 --terminate-after-n 1 "
+        f"goeffel --pid {testprocess.pid} -i 0.3 -t 1 "
         "--outfile-hdf5-path-prefix custom_prefix"
     )
     clitest.expect_filename_pattern(
@@ -87,7 +87,7 @@ def test_hdf5_path_prefix_custom(clitest, testprocess):
 
 def test_hdf5_path_prefix_custom_and_label(clitest, testprocess):
     clitest.run(
-        f"goeffel --pid {testprocess.pid} -i 0.3 --terminate-after-n 1 "
+        f"goeffel --pid {testprocess.pid} -i 0.3 -t 1 "
         "--outfile-hdf5-path-prefix custom_prefix --label custom-label"
     )
     clitest.expect_filename_pattern(
@@ -97,5 +97,5 @@ def test_hdf5_path_prefix_custom_and_label(clitest, testprocess):
 def test_a_number_of_features_together(clitest, testprocess):
     clitest.run(
         f"goeffel --pid-command 'echo {testprocess.pid}' "
-        "--diskstats sda --sampling-interval 0.3 --terminate-after-n 1"
+        "--diskstats sda --sampling-interval 0.3 -t 1"
     )
