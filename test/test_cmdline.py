@@ -109,3 +109,14 @@ def test_a_number_of_features_together(clitest, testprocess):
         f"goeffel --pid-command 'echo {testprocess.pid}' "
         "--diskstats sda --sampling-interval 0.3 -t 1"
     )
+
+
+def test_analysis_inspect(clitest, testprocess):
+    clitest.run(
+        f"goeffel --pid {testprocess.pid} -i 0.3 -t 1 --outfile-hdf5-path out.hdf5"
+    )
+
+    clitest.run(
+        f"goeffel-analysis inspect out.hdf5"
+    )
+
