@@ -95,6 +95,15 @@ def test_hdf5_path_prefix_custom_and_label(clitest, testprocess):
         r'^custom_prefix_custom-label_[0-9]+_[0-9]+\.hdf5$')
 
 
+def test_hdf5_path(clitest, testprocess):
+    clitest.run(
+        f"goeffel --pid {testprocess.pid} -i 0.3 -t 1 "
+        "--outfile-hdf5-path out.hdf5"
+    )
+    clitest.expect_filename_pattern(
+        r'^out\.hdf5$')
+
+
 def test_a_number_of_features_together(clitest, testprocess):
     clitest.run(
         f"goeffel --pid-command 'echo {testprocess.pid}' "
