@@ -174,8 +174,8 @@ def sampleloop(sampleq, consumer_process):
 
             # This exit criterion is useful for testing, but also for
             # unsupervised finite monitoring.
-            if ARGS.terminate_after_n_samples:
-                if n == ARGS.terminate_after_n_samples:
+            if ARGS.terminate_after_n:
+                if n == ARGS.terminate_after_n:
                     log.info('Terminate (acquired %s samples).', n)
                     sys.exit(0)
 
@@ -319,6 +319,10 @@ def process_cmdline_args():
         )
     )
 
+    datagroup = parser.add_argument_group(
+        title='Sampling behavior',
+        description=None
+    )
     parser.add_argument(
         '--diskstats',
         action='append',
@@ -326,12 +330,13 @@ def process_cmdline_args():
         help='Measure disk I/O statistics for device DEVNAME.'
     )
 
-    parser.add_argument(
-        '--terminate-after-n-samples',
+    datagroup.add_argument(
+        '--terminate-after-n',
+        '-t',
         metavar='N',
         type=int,
-        help='Quit program after acquiring N samples.'
-        )
+        #help='Quit after acquiring N samples (useful for testing).'
+        help=argparse.SUPPRESS
 
     parser.add_argument(
         '--hdf5-path-prefix',
