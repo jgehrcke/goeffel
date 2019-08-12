@@ -301,7 +301,7 @@ def process_cmdline_args():
     except AttributeError:
         pass
 
-    pidgroup= parser.add_mutually_exclusive_group(required=True)
+    pidgroup = parser.add_mutually_exclusive_group(required=True)
     pidgroup.add_argument(
         '--pid-command',
         metavar='\'COMMAND\'',
@@ -345,7 +345,9 @@ def process_cmdline_args():
         '-t',
         metavar='N',
         type=int,
-        #help='Quit after acquiring N samples (useful for testing).'
+        # help='Quit after acquiring N samples (useful for testing).'
+        # Note(JP): I use this only for testing, this should not be considered
+        # part of the public CLI.
         help=argparse.SUPPRESS
     )
     datagroup.add_argument(
@@ -653,6 +655,7 @@ class SampleConsumerProcess(multiprocessing.Process):
         hdf5table.attrs.goeffel_pid = ARGS.pid
         hdf5table.attrs.goeffel_sampling_interval_seconds = ARGS.sampling_interval
         hdf5table.attrs.goeffel_file_series_index = HDF5_FILE_SERIES_INDEX
+        hdf5table.attrs.goeffel_custom_label = ARGS.label
         hdf5file.close()
 
     def _hdf5_file_rotate_if_required(self):

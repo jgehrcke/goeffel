@@ -57,6 +57,7 @@ def testprocess():
 def test_pid(clitest, testprocess):
     clitest.run(f"goeffel --pid {testprocess.pid} -t 1")
 
+
 def test_pid_command_simple(clitest, testprocess):
     clitest.run(f"goeffel --pid-command 'echo {testprocess.pid}' -t 1")
 
