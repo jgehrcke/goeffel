@@ -83,8 +83,9 @@ $ goeffel --pid-command 'pgrep stress --newest'
 
 [... snip ...]
 ```
-`<command>` is expected to return a single process ID on stdout. In this mode
-`goeffel` runs forever until manually terminated via `SIGINT` or `SIGTERM`.
+`goeffel` invokes `<command>` periodically until it returns a valid process ID
+on stdout. In this mode `goeffel` runs forever until manually terminated via
+`SIGINT` or `SIGTERM`.
 
 ## `goeffel-analysis`: data inspection and visualization
 
@@ -201,6 +202,9 @@ disk, performing the measurement itself, and analyzing/plotting the data.
   sampling rate predictable upon disk write latency spikes, or generally upon
   backpressure. This matters especially in cloud environments where we sometimes
   see fsync latencies of multiple seconds.
+
+- The sampling loop is (supposed to be, feedback welcome) built so that
+  timing-related systematic measurement errors are minimized.
 
 - Goeffel tries to not asymmetrically hide measurement uncertainty. For example,
   you might see it measure a CPU utilization of a single-threaded process

@@ -59,7 +59,7 @@ import tables
 import psutil
 
 
-__version__ = "0.1.0"
+__version__ = "0.2.0-dev"
 
 
 # If the program is invoked with a PID command and the process goes away then
@@ -174,8 +174,8 @@ def sampleloop(sampleq, consumer_process):
 
             # This exit criterion is useful for testing, but also for
             # unsupervised finite monitoring.
-            if ARGS.terminate_after_n_samples:
-                if n == ARGS.terminate_after_n_samples:
+            if ARGS.terminate_after_n:
+                if n == ARGS.terminate_after_n:
                     log.info('Terminate (acquired %s samples).', n)
                     sys.exit(0)
 
@@ -301,56 +301,37 @@ def process_cmdline_args():
     except AttributeError:
         pass
 
-    what = parser.add_mutually_exclusive_group(required=True)
-    what.add_argument(
+    pidgroup = parser.add_mutually_exclusive_group(required=True)
+    pidgroup.add_argument(
         '--pid-command',
-        metavar='\'PID COMMAND\'',
+        metavar='\'COMMAND\'',
         help=(
-            'Run forever. Once the shell command returns a single process ID '
-            'on stdout that very process is being monitored.'
+            'The command is invoked periodically until it returns a single '
+            'process ID on stdout. The corresponding process is then '
+            'monitored until it goes away. In this mode, goeffel runs forever. '
+            'The command is executed unsanitized in a shell. Use with caution.'
         )
     )
-    what.add_argument(
+    pidgroup.add_argument(
         '--pid',
-        metavar='PROCESS_ID',
+        metavar='ID',
         help=(
-            'Monitor the process with that ID. Requires this process to exist. '
+            'Monitor a specific process. The process must exist. '
             'Terminate once the process goes away.'
         )
     )
 
-    parser.add_argument(
+    datagroup = parser.add_argument_group(
+        title='Sampling behavior',
+        description=None
+    )
+    datagroup.add_argument(
         '--diskstats',
         action='append',
         metavar='DEVNAME',
-        help='Measure disk I/O statistics for device DEVNAME.'
+        help='Measure and record I/O statistics for a storage device.'
     )
-
-    parser.add_argument(
-        '--terminate-after-n-samples',
-        metavar='N',
-        type=int,
-        help='Quit program after acquiring N samples.'
-        )
-
-    parser.add_argument(
-        '--hdf5-path-prefix',
-        metavar='PATH_PREFIX',
-        default='./goeffel_timeseries_',
-        help=(
-            'Change the HDF5 file path prefix. Default is '
-            './goeffel_timeseries_. Suffix is built automatically and contains '
-            'invocation time and file extension.'
-        )
-    )
-    parser.add_argument(
-        '--outfile-hdf5-path',
-        metavar='PATH',
-        default=None,
-        help='Use that if full control over the HDF5 file path is required.'
-    )
-
-    parser.add_argument(
+    datagroup.add_argument(
         '--no-system-metrics',
         action='store_true',
         default=False,
@@ -359,13 +340,54 @@ def process_cmdline_args():
             'the output data rate).'
         )
     )
-
-    parser.add_argument(
+    datagroup.add_argument(
+        '--terminate-after-n',
+        '-t',
+        metavar='N',
+        type=int,
+        # help='Quit after acquiring N samples (useful for testing).'
+        # Note(JP): I use this only for testing, this should not be considered
+        # part of the public CLI.
+        help=argparse.SUPPRESS
+    )
+    datagroup.add_argument(
         '--sampling-interval',
+        '-i',
         metavar='SECONDS',
         type=float,
         default=0.5,
         help='Data sampling interval (default: 0.5 s).'
+    )
+
+    filegroup = parser.add_argument_group(
+        title='Output file control',
+        description=None
+    )
+    filegroup.add_argument(
+        '--outfile-hdf5-path-prefix',
+        metavar='PREFIX',
+        default='./goeffel-timeseries',
+        help=(
+            'Change the HDF5 file path prefix. Default is '
+            './goeffel_timeseries. Suffix is built automatically and '
+            'contains LABEL as well as the program invocation time.'
+        )
+    )
+    filegroup.add_argument(
+        '--outfile-hdf5-path',
+        metavar='PATH',
+        default=None,
+        help='Use that if full control over the HDF5 file path is required.'
+    )
+
+    parser.add_argument(
+        '--label',
+        metavar='LABEL',
+        help=(
+            'Annotate time series. Optional, but recommended. The label is '
+            'added to the (default) output filename, and written to file '
+            'metadata. Should be short, must be free of whitespace.'
+        )
     )
 
     # Do basic command line argument validation. Populate `ARGS` for the rest
@@ -390,7 +412,9 @@ def _process_cmdline_args_advanced():
         if ARGS.outfile_hdf5_path:
             path_hdf5 = ARGS.outfile_hdf5_path
         else:
-            path_hdf5 = f'{ARGS.hdf5_path_prefix}_{INVOCATION_TIME_LOCAL_STRING}.hdf5'
+            path_hdf5 = \
+                ARGS.outfile_hdf5_path_prefix + '_' + ARGS.label + '_' + \
+                INVOCATION_TIME_LOCAL_STRING + '.hdf5'
 
         # Expose config to the rest of the program.
         global OUTFILE_PATH_HDF5
@@ -465,6 +489,14 @@ def _process_cmdline_args_advanced():
             'The sampling interval is probably too small, and I cannot '
             'guarantee meaningful data collection. Exit.'
         )
+
+    # `--label` must be processed before outfile args.
+    if ARGS.label is not None:
+        if re.sub(re.compile(r'\s+'), '', ARGS.label) != ARGS.label:
+            sys.exit('The --label must not contain whitespace.')
+    else:
+        # Empty string is being used elsewhere.
+        ARGS.label = ''
 
     _process_outfile_args()
     _process_diskstats_args()
@@ -623,6 +655,8 @@ class SampleConsumerProcess(multiprocessing.Process):
         hdf5table.attrs.goeffel_pid = ARGS.pid
         hdf5table.attrs.goeffel_sampling_interval_seconds = ARGS.sampling_interval
         hdf5table.attrs.goeffel_file_series_index = HDF5_FILE_SERIES_INDEX
+        hdf5table.attrs.goeffel_custom_label = ARGS.label
+        hdf5table.attrs.goeffel_software_version = __version__
         hdf5file.close()
 
     def _hdf5_file_rotate_if_required(self):

@@ -10,30 +10,15 @@
 - allow for emitting data into a metrics pipeline via network (statsd, ...)
 
 
-## File management
-
-- File management in general: prevent accidental concurrent write access.
-  Example scenario: goeffel started twice with default args in the same second.
-  File locking?
-
-
 ## goeffel-analysis
 
-- For the magic plot allow for a non-interactive mode which only writes to disk.
-
 - control log level with command line flag
-
-- make non-interactive mode default because of the figure size issue:
-  https://github.com/matplotlib/matplotlib/issues/7338
-  Write PDF and PNG by default.
 
 
 ## Ideas for walk-through / tutorial / blog:
 
 - Show how PID command picks up new PID
-- Show inspect
-- Show magic
-- Show non-interactive magic, writing PNG file
+
 
 ## Docs
 
@@ -42,6 +27,9 @@
 
 
 ## Misc notes
+
+- Add (a) metric(s) related to the network throughput of a process and/or TCP
+  metrics in particular.
 
 - Add a 'label' concept, an arbitrary label that would be stored with the HDF5
   meta data, and would also automatically be appended to
@@ -53,8 +41,6 @@
 
 - build a mode without process-specific monitoring (no pid, no pid command)?
 
-- Note software name and version in HDF5 file meta data.
-
 - measure resource utilization of goeffel with another instance of goeffel.
 
 - Replace HDF5 type for columns with unit 'percent' to be Float16 instead of Float32?
@@ -62,8 +48,12 @@
 - architecture: if the sample writer crashes for whichever reason we want to
   crash the entire program, right?
 
-- Allow for installing `goefel` w/o the depdencies required solely for
+- Allow for installing `goeffel` w/o the depdencies required solely for
   `goeffel-analysis`.
+
+- non-interactive mode is default because of the figure size issue:
+  https://github.com/matplotlib/matplotlib/issues/7338 Write PNG by default.
+  Writing PDF is not really an option w/o thinning out data.
 
 - Add option to not measure IP connections? Can be CPU costly. Measure/compare.
   Does this matter?

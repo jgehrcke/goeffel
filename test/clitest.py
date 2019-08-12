@@ -16,6 +16,7 @@ import shutil
 import logging
 import subprocess
 import traceback
+import re
 
 
 # Make the same code base run with Python 2 and 3.
@@ -125,8 +126,8 @@ class CmdlineInterfaceTest(object):
         self.name = name
         self.rundir = rundir
         self.shellscript_name = "test%s" % (self.shellscript_ext, )
-        errfilename = "runtest.err"
-        outfilename = "runtest.out"
+        errfilename = "__runtest.err"
+        outfilename = "__runtest.out"
         self.errfilepath = os.path.join(self.rundir, errfilename)
         self.outfilepath = os.path.join(self.rundir, outfilename)
         self._clear_create_rundir()
@@ -375,6 +376,24 @@ class CmdlineInterfaceTest(object):
         for invalid permissions.
         """
         self._paths_exist(p, invert=True)
+
+    def expect_filename_pattern(self, pattern, match_count=1):
+        """Expect `match_count` files in the run directory whose file names all
+        match the regular expression `pattern`.
+
+        If `match_count` is `None` then expect at least one match but otherwise
+        ignore the exact count.
+        """
+        matches = []
+        filenames = os.listdir(self.rundir)
+        log.info('filenames: %s', filenames)
+        for filename in filenames:
+            if re.match(re.compile(pattern), filename):
+                matches.append(filename)
+
+        assert matches
+        if match_count is not None:
+            assert len(matches) == match_count
 
     def _paths_exist(self, p, invert=False):
         _, pathlist = _list_string_type(p)
