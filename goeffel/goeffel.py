@@ -656,7 +656,7 @@ class SampleConsumerProcess(multiprocessing.Process):
         hdf5table.attrs.goeffel_sampling_interval_seconds = ARGS.sampling_interval
         hdf5table.attrs.goeffel_file_series_index = HDF5_FILE_SERIES_INDEX
         hdf5table.attrs.goeffel_custom_label = ARGS.label
-        hdf5table.attrs.goeffel_version = __version__
+        hdf5table.attrs.goeffel_software_version = __version__
         hdf5file.close()
 
     def _hdf5_file_rotate_if_required(self):
