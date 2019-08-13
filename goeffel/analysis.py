@@ -299,6 +299,7 @@ def inspect_data_file():
             f'  PID: {_gattr("pid")}\n'
             f'  Sampling interval: {_gattr("sampling_interval_seconds")} s\n'
             f'  Label: {_gattr("custom_label", strict=False)}\n'
+            f'  Command (roughly): {_gattr("command", strict=False)}\n'
             # f'  Goeffel schema version: {table.attrs.goeffel_schema_version}\n'
         )
 

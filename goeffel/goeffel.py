@@ -657,6 +657,7 @@ class SampleConsumerProcess(multiprocessing.Process):
         hdf5table.attrs.goeffel_file_series_index = HDF5_FILE_SERIES_INDEX
         hdf5table.attrs.goeffel_custom_label = ARGS.label
         hdf5table.attrs.goeffel_software_version = __version__
+        hdf5table.attrs.goeffel_command = poor_mans_cmdline()
         hdf5file.close()
 
     def _hdf5_file_rotate_if_required(self):
@@ -1223,6 +1224,21 @@ def start_trial_process():
     p.start()
     log.info('Started trial process: process ID %s', p.pid)
     return p.pid
+
+
+def poor_mans_cmdline():
+    # An effort to re-construct the original command line. This is for informal
+    # purposes (for annotating the measurement, mainly) and is known to not
+    # result in the original command line in corner cases.
+    fragments = [sys.argv[0]]
+    for arg in sys.argv[1:]:
+        if ' ' in arg:
+            # For example, if `arg` contains a single quote then this will
+            # result in a broken cmdline.
+            fragments.append(" '%s'" % (arg, ))
+        else:
+            fragments.append(" %s" % (arg, ))
+    return ''.join(fragments)
 
 
 def get_hostname():

@@ -34,9 +34,6 @@
   https://stackoverflow.com/a/1983000
   http://www.brendangregg.com/blog/2016-10-15/linux-bcc-tcptop.html
 
-- Add the goeffel command (the entire cmdline) itself to the HDF5 file as meta
-  data.
-
 - goeffel cmdline args: make first argument positional arg, and auto-detect
   whether it's an integer (PID) or otherwise PID command (cleaner semantics)?
     - I am not quite sure about this. Compare this in terms of readability:
@@ -64,9 +61,9 @@
 - Add option to not measure IP connections? Can be CPU costly. Measure/compare.
   Does this matter?
 
-- On a loaded system profile goeffel and see where it spends its time.
-  Pops up in top with 6 % CPU utilization. A quick `perf top` on the
-  sampling process shows that it spends most of its time in kernel space,
+- On a loaded system profile goeffel and see where it spends its time. Pops up
+  in top with 6 % CPU utilization on a really busy machine. A quick `perf top`
+  on the sampling process shows that it spends most of its time in kernel space,
   not too bad:
 
     Overhead  Shared Object         Symbol
