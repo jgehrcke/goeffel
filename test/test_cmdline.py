@@ -95,6 +95,15 @@ def test_hdf5_path_prefix_custom_and_label(clitest, testprocess):
         r'^custom_prefix_custom-label_[0-9]+_[0-9]+\.hdf5$')
 
 
+def test_hdf5_opt_collision(clitest, testprocess):
+    clitest.run(
+        f"goeffel --pid {testprocess.pid} -i 0.3 -t 1 "
+        "--outfile-hdf5-path-prefix a --outfile-hdf5-path b",
+        expect_rc=2
+    )
+    clitest.assert_in_stderr('not allowed with argument')
+
+
 def test_hdf5_path(clitest, testprocess):
     clitest.run(
         f"goeffel --pid {testprocess.pid} -i 0.3 -t 1 "
