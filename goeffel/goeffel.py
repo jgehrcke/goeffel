@@ -136,7 +136,7 @@ def main():
 
         log.info('Wait for consumer process to terminate')
         consumer_process.join()
-        log.info('Sample consumer process terminated')
+        log.info('Consumer process terminated')
 
 
 def sampleloop(sampleq, consumer_process):
@@ -183,6 +183,7 @@ def sampleloop(sampleq, consumer_process):
     # line. Error out and exit program in the moment the PID cannot be monitored
     # (as of process not existing, insufficient permissions, etc.).
     if ARGS.pid is not None:
+
         # Best-effort problem checking before entering the loop. This is for
         # user-friendly error handling: Whatever fails here, during program
         # invocation, must lead to a proper error mesage and a non-zero exit
@@ -335,7 +336,7 @@ def process_cmdline_args():
 
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description='Measures process and system resource utilization.',
+        description='Measures the resource utilization of a specific process over time.',
         epilog=textwrap.dedent(__doc__).strip()
     )
 
@@ -345,7 +346,6 @@ def process_cmdline_args():
         parser._optionals.title = "Arguments"
     except AttributeError:
         pass
-
 
     pidgroup = parser.add_argument_group(
         title='Process discovery',
