@@ -368,7 +368,9 @@ def process_cmdline_args():
         title='Output file control',
         description=None
     )
-    filegroup.add_argument(
+
+    hdf5_me = filegroup.add_mutually_exclusive_group()
+    hdf5_me.add_argument(
         '--outfile-hdf5-path-prefix',
         metavar='PREFIX',
         default='./goeffel-timeseries',
@@ -378,7 +380,7 @@ def process_cmdline_args():
             'contains LABEL as well as the program invocation time.'
         )
     )
-    filegroup.add_argument(
+    hdf5_me.add_argument(
         '--outfile-hdf5-path',
         metavar='PATH',
         default=None,
@@ -391,7 +393,8 @@ def process_cmdline_args():
         help=(
             'Annotate time series. Optional, but recommended. The label is '
             'added to the (default) output filename, and written to file '
-            'metadata. Should be short, must be free of whitespace.'
+            'metadata. Should be short, must be free of whitespace. '
+            'Example: the name of the program you would like to monitor.'
         )
     )
 
