@@ -37,9 +37,9 @@ setup(
         'Programming Language :: Python :: Implementation :: CPython',
         'Operating System :: POSIX',
         ],
-    # TODO(JP):pandas, matplotlib are for the analyss program only. Make it so
+    # TODO(JP):pandas, matplotlib are for the analysis program only. Make it so
     # that the measurement program can be pip-installed w/o requiring pandas and
-    # matplotlib. Is there a flag we can pass to `pip install ...` here? Release
-    # two different PyPI packages?
+    # matplotlib. Use https://setuptools.readthedocs.io/en/latest/setuptools.html
+    # #declaring-extras-optional-features-with-their-own-dependencies
     install_requires=('tables', 'psutil', 'pandas', 'matplotlib'),
     )
