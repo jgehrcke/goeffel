@@ -9,8 +9,8 @@ Built for Linux. Windows and Mac OS support might come.
 
 For a list of the currently supported metrics see [below](#measurands).
 
-The name, [Göffel](https://de.wikipedia.org/wiki/Essbesteck#Mischformen), is the
-German version of [spork](https://en.wikipedia.org/wiki/Spork):
+The name, [Göffel](https://de.wikipedia.org/wiki/Essbesteck#Mischformen), is
+German for [spork](https://en.wikipedia.org/wiki/Spork):
 
 ![image of a spork](docs/figs/spork.jpg?raw=true "image of spork / Göffel")
 
@@ -20,18 +20,23 @@ Convenient, right?
 
 - High sampling rate: the default sampling interval of `0.5 s` makes narrow
   spikes visible.
-- Can monitor a program subject to process ID changes (useful for longevity
-  experiments where the monitored process occasionally restarts, for instance as
-  of fail-over scenarios).
-- Is meant to run unsupervised. Has predictable disk space requirements (output
+- Can monitor a program subject to process ID changes (for longevity experiments
+  where the monitored process occasionally restarts, for instance as of
+  fail-over scenarios).
+- Can run indefinitely. Has predictable disk space requirements (output
   file rotation and retention policy).
-- Helps keeping data organized: time series data is written into
-  [HDF5](https://en.wikipedia.org/wiki/Hierarchical_Data_Format) files, and
-  annotated with relevant metadata such as the program invocation time, system
-  hostname, and Goeffel software version.
-- Comes with a data plotting tool separate from the data acquisition program.
+- Keeps your data organized: the time series data is written into a structured
+  [HDF5](https://en.wikipedia.org/wiki/Hierarchical_Data_Format) file annotated
+  with relevant metadata (also including program invocation time, system
+  hostname, a custom label, the Goeffel software version, and others).
+- Interoperability: output files can be read with any HDF5 reader such as
+  [PyTables](https://www.pytables.org) and especially with
+  [pandas.read_hdf()](https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.read_hdf.html).
+  See [tips and tricks](#tips-and-tricks).
 - Values measurement correctness very highly (see [technical
   notes](#technical-notes)).
+- Comes with a data plotting tool separate from the data acquisition program.
+
 
 
 # CLI usage
