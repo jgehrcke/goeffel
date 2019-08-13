@@ -136,7 +136,7 @@ def main():
 
         log.info('Wait for consumer process to terminate')
         consumer_process.join()
-        log.info('Sample consumer process terminated')
+        log.info('Consumer process terminated')
 
 
 def sampleloop(sampleq, consumer_process):
@@ -183,11 +183,52 @@ def sampleloop(sampleq, consumer_process):
     # line. Error out and exit program in the moment the PID cannot be monitored
     # (as of process not existing, insufficient permissions, etc.).
     if ARGS.pid is not None:
+
+        # Best-effort problem checking before entering the loop. This is for
+        # user-friendly error handling: Whatever fails here, during program
+        # invocation, must lead to a proper error mesage and a non-zero exit
+        # code.
+        try:
+            psutil.Process(ARGS.pid).connections(kind='inet')
+
+        except psutil.AccessDenied as exc:
+            log.error('Insufficient privileges: %s', exc)
+            if hasattr(exc, '__context__'):
+                log.error('Error detail: %s', exc.__context__)
+            log.info('Try running as root. Exiting non-zero.')
+            sys.exit(1)
+
+        except psutil.NoSuchProcess:
+            log.info('No process found with ID %s. Exiting non-zero.', ARGS.pid)
+            sys.exit(1)
+
+        except Exception as exc:
+            # Do not throw a traceback here. If this is really a problem then it
+            # will re-appear in the sampling loop, and the the "proper" error
+            # handling aproach around the sampling loop is supposed to catch and
+            # handle this.
+            log.debug('Ignored exception: %s', exc)
+            pass
+
+        # Enter the sampling loop, expect it to throw an error at some point.
         try:
             _sample_process_loop(ARGS.pid, sampleq, consumer_process)
+
+        except psutil.NoSuchProcess:
+            # If the process disappers during startup then not a single sample
+            # might have been written out. That's not quite "success", but hard
+            # to detect reliably from here.
+            log.info('Process went away. Exit, indicate success')
+            sys.exit(0)
+
         except psutil.Error as exc:
-            # An expected condition when the process goes away, so not an error.
-            log.info('Cannot inspect process: %s', exc.msg)
+            # There are also (rare?) error cases when something changes during a
+            # longevity experiment, something other than the process dying,
+            # something related to privileges, or other things.
+            log.info('Cannot inspect process (anymore), error: %s', exc)
+            if isinstance(exc, psutil.AccessDenied):
+                log.warning('Insufficient privileges (try running as root)')
+            log.info('Exiting non-zero.')
             sys.exit(1)
 
     # Handle the case where a PID command was provided on the command line. That
@@ -205,7 +246,12 @@ def sampleloop(sampleq, consumer_process):
         try:
             _sample_process_loop(pid, sampleq, consumer_process)
         except psutil.Error as exc:
-            log.info('Cannot inspect process: %s', exc.msg)
+            if isinstance(exc, psutil.AccessDenied):
+                log.warning('Insufficient privileges (try running as root): %s', exc)
+                time.sleep(PROCESS_PID_POLL_INTERVAL_SECONDS)
+                continue
+            log.info('Error in sampling loop: %s', exc)
+            time.sleep(PROCESS_PID_POLL_INTERVAL_SECONDS)
 
 
 class HDF5Schema:
@@ -290,7 +336,7 @@ def process_cmdline_args():
 
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description='Measures process and system resource utilization.',
+        description='Measures the resource utilization of a specific process over time.',
         epilog=textwrap.dedent(__doc__).strip()
     )
 
@@ -301,8 +347,12 @@ def process_cmdline_args():
     except AttributeError:
         pass
 
-    pidgroup = parser.add_mutually_exclusive_group(required=True)
-    pidgroup.add_argument(
+    pidgroup = parser.add_argument_group(
+        title='Process discovery',
+        description=None
+    )
+    pidgroup_me = pidgroup.add_mutually_exclusive_group(required=True)
+    pidgroup_me.add_argument(
         '--pid-command',
         metavar='\'COMMAND\'',
         help=(
@@ -312,7 +362,7 @@ def process_cmdline_args():
             'The command is executed unsanitized in a shell. Use with caution.'
         )
     )
-    pidgroup.add_argument(
+    pidgroup_me.add_argument(
         '--pid',
         metavar='ID',
         help=(
@@ -363,7 +413,9 @@ def process_cmdline_args():
         title='Output file control',
         description=None
     )
-    filegroup.add_argument(
+
+    hdf5_me = filegroup.add_mutually_exclusive_group()
+    hdf5_me.add_argument(
         '--outfile-hdf5-path-prefix',
         metavar='PREFIX',
         default='./goeffel-timeseries',
@@ -373,7 +425,7 @@ def process_cmdline_args():
             'contains LABEL as well as the program invocation time.'
         )
     )
-    filegroup.add_argument(
+    hdf5_me.add_argument(
         '--outfile-hdf5-path',
         metavar='PATH',
         default=None,
@@ -386,7 +438,8 @@ def process_cmdline_args():
         help=(
             'Annotate time series. Optional, but recommended. The label is '
             'added to the (default) output filename, and written to file '
-            'metadata. Should be short, must be free of whitespace.'
+            'metadata. Should be short, must be free of whitespace. '
+            'Example: the name of the program you would like to monitor.'
         )
     )
 
@@ -657,6 +710,7 @@ class SampleConsumerProcess(multiprocessing.Process):
         hdf5table.attrs.goeffel_file_series_index = HDF5_FILE_SERIES_INDEX
         hdf5table.attrs.goeffel_custom_label = ARGS.label
         hdf5table.attrs.goeffel_software_version = __version__
+        hdf5table.attrs.goeffel_command = poor_mans_cmdline()
         hdf5file.close()
 
     def _hdf5_file_rotate_if_required(self):
@@ -1223,6 +1277,21 @@ def start_trial_process():
     p.start()
     log.info('Started trial process: process ID %s', p.pid)
     return p.pid
+
+
+def poor_mans_cmdline():
+    # An effort to re-construct the original command line. This is for informal
+    # purposes (for annotating the measurement, mainly) and is known to not
+    # result in the original command line in corner cases.
+    fragments = [sys.argv[0]]
+    for arg in sys.argv[1:]:
+        if ' ' in arg:
+            # For example, if `arg` contains a single quote then this will
+            # result in a broken cmdline.
+            fragments.append(" '%s'" % (arg, ))
+        else:
+            fragments.append(" %s" % (arg, ))
+    return ''.join(fragments)
 
 
 def get_hostname():
