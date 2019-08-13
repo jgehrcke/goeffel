@@ -25,13 +25,12 @@ Convenient, right?
 - Comes with a data plotting tool separate from the data acquisition program.
 
 
-# CLI usage
+# CLI tutorial
 
 ## `goeffel`: data acquisition
 
-Simply invoke goeffel with the `--pid <pid>` argument if the process ID of the
-target process is known. In this mode `goeffel` stops measurement and terminates
-itself once the process with the given ID goes away. Example:
+Invoke goeffel with the `--pid <pid>` argument if the process ID of the target process is known.
+In this mode `goeffel` stops measurement and terminates itself once the process with the given ID goes away. Example:
 
 ```text
 $ goeffel --pid 29019
@@ -50,8 +49,8 @@ $ goeffel --pid 29019
 ```
 
 
-For measuring beyond the process lifetime use `--pid-command <command>`, as in
-this example:
+For measuring beyond the process lifetime use `--pid-command <command>`.
+In the following example I use the [pgrep](https://linux.die.net/man/1/pgrep) utility is for discovering the newest [stress](https://linux.die.net/man/1/stress) process:
 
 ```text
 $ goeffel --pid-command 'pgrep stress --newest'
@@ -59,8 +58,9 @@ $ goeffel --pid-command 'pgrep stress --newest'
 [... snip ...]
 
 190809-15:47:47.337 INFO: New process ID from PID command: 25890
-190809-15:47:47.840 INFO: Create HDF5 file: ./goeffel_timeseries__20190809_154747.hdf5
-190809-15:47:47.860 INFO: Updated HDF5 file: wrote 1 sample(s) in 0.02033 s
+
+[... snip ...]
+
 190809-15:47:57.863 INFO: Updated HDF5 file: wrote 20 sample(s) in 0.01805 s
 190809-15:48:06.850 INFO: Cannot inspect process: process no longer exists (pid=25890)
 190809-15:48:06.859 INFO: PID command returned non-zero
@@ -74,30 +74,27 @@ $ goeffel --pid-command 'pgrep stress --newest'
 
 [... snip ...]
 ```
-`goeffel` invokes `<command>` periodically until it returns a valid process ID
-on stdout. In this mode `goeffel` runs forever until manually terminated via
-`SIGINT` or `SIGTERM`.
+In this mode `goeffel` runs forever until manually terminated via `SIGINT` or `SIGTERM`.
+Process ID changes are detected by periodically running the discovery command until it returns a valid process ID on stdout.
+This is useful for longevity experiments where the monitored process occasionally restarts, for instance as of fail-over scenarios.
 
 ## `goeffel-analysis`: data inspection and visualization
 
-**Note**: `goeffel-analysis` provides an opinionated and limited approach to
-visualizing data. For advanced and thorough data analysis I recommend building a
-custom (maybe even ad-hoc!) data analysis pipeline using `pandas` and
-`matplotlib` (or using the tooling of your choice).
+**Note**: `goeffel-analysis` provides an opinionated and limited approach to visualizing data. For advanced and thorough data analysis I recommend building a custom (maybe even ad-hoc!) data analysis pipeline using `pandas` and `matplotlib`, or using the tooling of your choice.
 
-**Warning**: The command line interface provided by `goeffel-analysis`,
+**Also note**: The command line interface provided by `goeffel-analysis`,
 especially for the plot commands, might change in the future. Suggestions for
-improvement are welcome.
+improvement are welcome, of course.
 
 ### `goeffel-analysis inspect`:
 
 Use `goeffel-analysis inspect <path-to-HDF5-file>` for inspecting the contents
-of a Goeffel HDF5 file. Example:
+of a Goeffel output file. Example:
 
 ```text
 $ goeffel-analysis inspect mwst18-master1-journal_20190801_111952.hdf5
 Measurement meta data:
-  System hostname: int-master1-mwt18.scaletesting.mesosphe.re
+  System hostname: int-master1-mwt18.foo.bar
   Invocation time (local): 20190801_111952
   PID command: pgrep systemd-journal
   PID: None
