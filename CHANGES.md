@@ -8,6 +8,7 @@ Renamed to Goeffel.
 - Consolidate sampling loop, make the sampling interval much more predictable.
 - Add `monotime` metric.
 - Fix bug as of which every Nth sample was not emitted to the output file.
+- Consolidated error handling around a lack of privileges, and implement better exit code control.
 - Add `trialprocess` gimmick.
 - Command line interface cleanup, among others:
     - Add `-i` short option (for `--sampling-interval`).
