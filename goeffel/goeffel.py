@@ -301,8 +301,13 @@ def process_cmdline_args():
     except AttributeError:
         pass
 
-    pidgroup = parser.add_mutually_exclusive_group(required=True)
-    pidgroup.add_argument(
+
+    pidgroup = parser.add_argument_group(
+        title='Process discovery',
+        description=None
+    )
+    pidgroup_me = pidgroup.add_mutually_exclusive_group(required=True)
+    pidgroup_me.add_argument(
         '--pid-command',
         metavar='\'COMMAND\'',
         help=(
@@ -312,7 +317,7 @@ def process_cmdline_args():
             'The command is executed unsanitized in a shell. Use with caution.'
         )
     )
-    pidgroup.add_argument(
+    pidgroup_me.add_argument(
         '--pid',
         metavar='ID',
         help=(
