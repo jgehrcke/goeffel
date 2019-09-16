@@ -2,7 +2,7 @@
 
 Measures the resource utilization of a specific process over time.
 
-Also measures the utilization / saturation of system-wide resources: this helps putting the process-specific metrics into context.
+Also measures the utilization/saturation of system-wide resources: this helps putting the process-specific metrics into context.
 
 Built for Linux. Windows and Mac OS support might come.
 
@@ -43,7 +43,7 @@ $ pip install git+https://github.com/jgehrcke/goeffel
 ## `goeffel`: data acquisition
 
 Invoke Goeffel with the `--pid <pid>` argument if the process ID of the target process is known.
-In this mode `goeffel` stops measurement and terminates itself once the process with the given ID goes away. Example:
+In this mode, `goeffel` stops the measurement and terminates itself once the process with the given ID goes away. Example:
 
 ```text
 $ goeffel --pid 29019
@@ -63,7 +63,7 @@ $ goeffel --pid 29019
 
 
 For measuring beyond the process lifetime use `--pid-command <command>`.
-In the following example I use the [pgrep](https://linux.die.net/man/1/pgrep) utility is for discovering the newest [stress](https://linux.die.net/man/1/stress) process:
+In the following example, I use the [pgrep](https://linux.die.net/man/1/pgrep) utility is for discovering the newest [stress](https://linux.die.net/man/1/stress) process:
 
 ```text
 $ goeffel --pid-command 'pgrep stress --newest'
@@ -87,7 +87,7 @@ $ goeffel --pid-command 'pgrep stress --newest'
 
 [... snip ...]
 ```
-In this mode `goeffel` runs forever until manually terminated via `SIGINT` or `SIGTERM`.
+In this mode, `goeffel` runs forever until manually terminated via `SIGINT` or `SIGTERM`.
 Process ID changes are detected by periodically running the discovery command until it returns a valid process ID on stdout.
 This is useful for longevity experiments where the monitored process occasionally restarts, for instance as of fail-over scenarios.
 
@@ -106,7 +106,7 @@ of a Goeffel output file. Example:
 
 ```text
 $ goeffel-analysis inspect mwst18-master1-journal_20190801_111952.hdf5
-Measurement meta data:
+Measurement metadata:
   System hostname: int-master1-mwt18.foo.bar
   Invocation time (local): 20190801_111952
   PID command: pgrep systemd-journal
@@ -143,11 +143,9 @@ Example output figure:
 
 ### `goeffel-analysis plot`: generic plot command
 
-Can be used for example for comparing multiple time series. Say you have
-monitored the same program across multiple replicas in a distributed system and
-would like to compare the time evolution of a certain metric across these
-replicas. Then the `goeffel-analysis plot` command is here to help, invoked with
-multiple `--series` arguments:
+This command can be used for example for comparing multiple time series.
+Say you have monitored the same program across multiple replicas in a distributed system and would like to compare the time evolution of a certain metric across these replicas.
+Then the `goeffel-analysis plot` command is here to help, invoked with multiple `--series` arguments:
 
 ```bash
 $ goeffel-analysis plot \
@@ -175,7 +173,7 @@ Example output figure:
 This was born out of a need for solid tooling. We started with [pidstat from
 sysstat](https://github.com/sysstat/sysstat/blob/master/pidstat.c), launched as
 `pidstat -hud -p $PID 1 1`. We found that it does not properly account for
-multiple threads running in the same process, and that various issues in that
+multiple threads running in the same process and that various issues in that
 regard exist in this program across various versions (see
 [here](https://github.com/sysstat/sysstat/issues/73#issuecomment-349946051),
 [here](https://github.com/sysstat/sysstat/commit/52977c479), and
@@ -209,7 +207,7 @@ disk, performing the measurement itself, and analyzing/plotting the data.
 
 - Goeffel tries to not asymmetrically hide measurement uncertainty. For example,
   you might see it measure a CPU utilization of a single-threaded process
-  slightly larger than 100 %. That's simply the measurement error. In other
+  slightly larger than 100 %. That's simply the measurement error. In related
   tooling such as `sysstat` it seems to be common practice to _asymmetrically_
   hide measurement uncertainty by capping values when they are known to in
   theory not exceed a certain threshold
@@ -245,13 +243,13 @@ The timestamp corresponding to the *right* boundary of the sampled time
 interval.
 
 * `unixtime` encodes the wall time. It is a canonical Unix timestamp (seconds
-  since epoch, double precision floating point number); with sub-second
+  since epoch, double-precision floating point number); with sub-second
   precision and no timezone information. This is compatible with a wide range of
   tooling and therefore the general-purpose timestamp column for time series
   analysis (also see [How to convert the `unixtime` column into a
   `pandas.DatetimeIndex`](#how-to-convert-the-unixtime-column-into-a-pandasdatetimeindex)).
-  **Note**: this is subject to system clock drift. In extreme cases this might
-  go backwards, have jumps, and be a useless metric. In that case the `monotime`
+  **Note**: this is subject to system clock drift. In extreme case, this might
+  go backward, have discontinuities, and be a useless metric. In that case, the `monotime`
   metric helps (see below).
 
 * `isotime_local` is a human-readable version of the same timestamp as stored in
@@ -261,7 +259,7 @@ interval.
   pretty useless in extreme cases.
 
 * `monotime` is based on a so-called
-  [monotonic](https://www.python.org/dev/peps/pep-0418/#id19) clock source which
+  [monotonic](https://www.python.org/dev/peps/pep-0418/#id19) clock source that
   is *not* subject to (accidental or well-intended) system clock drift. This
   column encodes most accurately the relative time difference between any two
   samples in the time series. The timestamps encoded in this column only make
@@ -356,7 +354,7 @@ Mean over the past sampling interval.
 #### `proc_mem_rss_percent`
 
 Fraction of process [resident set size](https://stackoverflow.com/a/21049737)
-(RSS) relative to machine's physical memory size in `percent`.
+(RSS) relative to the machine's physical memory size in `percent`.
 
 Momentary state at sampling time.
 
@@ -380,7 +378,7 @@ dashes in `<DEV>` get removed when building the column names).
 
 Note that the conclusiveness of some of these disk metrics is limited. I believe
 that [this blog post](https://blog.serverfault.com/2010/07/06/777852755/) nicely
-covers a few basic Linux disk I/O concepts that should be known prior to reading
+covers a few basic Linux disk I/O concepts that should be known prior to read
 a meaning into these numbers.
 
 #### `disk_<DEV>_util_percent`
@@ -397,7 +395,7 @@ this metric in the following words:
 
 This is the mean over the sampling interval.
 
-**Note**: In case of modern storage systems `100 %` utilization usually does
+**Note**: In the case of modern storage systems `100 %` utilization usually does
 **not** mean that the device is saturated. I would like to quote [Marc
 Brooker](https://brooker.co.za/blog/2014/07/04/iostat-pct.html):
 
@@ -413,7 +411,7 @@ This implements iostat's `w_await` which is documented with
 > be served. This includes the time spent by the requests in queue and the time
 > spent servicing them.
 
-On Linux this is built using `/proc/diskstats` documented
+On Linux, this is built using `/proc/diskstats` documented
 [here](https://github.com/torvalds/linux/blob/v5.3-rc3/Documentation/admin-guide/iostats.rst#io-statistics-fields).
 Specifically, this uses field 8 ("number of milliseconds spent writing") and
 field 5 ("number of writes completed"). Notably, the latter it is *not* the
@@ -422,7 +420,7 @@ uses for calculating `w_await`).
 
 This can be a useful metric, but please be aware of its meaning and limitations.
 To put this into perspective, in an experiment I have seen that the following
-can happen within a second of real time (observed via `iostat -x 1 | grep xvdh`
+can happen within a second of real-time (observed via `iostat -x 1 | grep xvdh`
 and via direct monitoring of `/proc/diskstats`): 3093 userspace write requests
 served, merged into 22 device write requests, yielding a total of 120914
 milliseconds "spent writing", resulting in a mean write latency of 25 ms. But
@@ -499,9 +497,9 @@ MiB).
 
 ## How to visualize and browse the contents of an HDF5 file
 
-At some point you might feel inclined to poke around in an HDF5 file created by
-Goeffel or to do custom data inspection / processing. In that case I recommend
-to use one of the various available open-source HDF5 tools for managing and
+At some point, you might feel inclined to poke around in an HDF5 file created by
+Goeffel or to do custom data inspection/processing. In that case, I recommend
+using one of the various available open-source HDF5 tools for managing and
 viewing HDF5 files. One GUI tool I have frequently used is
 [ViTables](http://vitables.org/). Install it with `pip install vitables` and
 then do e.g.
@@ -511,7 +509,7 @@ vitables goeffel_20190718_213115.hdf5
 ```
 
 This opens a GUI which allows for browsing the tabular time series data, for
-viewing the meta data in the file, for exporting data as CSV, for querying the
+viewing the metadata in the file, for exporting data as CSV, for querying the
 data, and various other things.
 
 ## How to do quick data analysis using IPython and pandas
