@@ -24,6 +24,19 @@ Convenient, right?
 - Values measurement correctness very highly (see [technical notes](#technical-notes)).
 - Comes with a data plotting tool separate from the data acquisition program.
 
+# Download & installation
+
+The latest goeffel release can be downloaded and installed from PyPI, via pip:
+
+```
+$ pip install goeffel
+```
+
+pip can also install the latest development version of goeffel:
+
+```
+$ pip install git+https://github.com/jgehrcke/goeffel
+```
 
 # CLI tutorial
 
