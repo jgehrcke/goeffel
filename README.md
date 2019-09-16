@@ -393,7 +393,7 @@ same time interval, expressed in percent. The iostat documentation describes
 this metric in the following words:
 
 > Percentage of elapsed time during which I/O requests were issued to the device
-> (bandwidth  utilization  for the device)."
+> (bandwidth  utilization  for the device).
 
 This is the mean over the sampling interval.
 
