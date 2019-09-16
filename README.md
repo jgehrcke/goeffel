@@ -26,13 +26,13 @@ Convenient, right?
 
 # Download & installation
 
-The latest goeffel release can be downloaded and installed from PyPI, via pip:
+The latest Goeffel release can be downloaded and installed from PyPI, via pip:
 
 ```
 $ pip install goeffel
 ```
 
-pip can also install the latest development version of goeffel:
+pip can also install the latest development version of Goeffel:
 
 ```
 $ pip install git+https://github.com/jgehrcke/goeffel
@@ -42,7 +42,7 @@ $ pip install git+https://github.com/jgehrcke/goeffel
 
 ## `goeffel`: data acquisition
 
-Invoke goeffel with the `--pid <pid>` argument if the process ID of the target process is known.
+Invoke Goeffel with the `--pid <pid>` argument if the process ID of the target process is known.
 In this mode `goeffel` stops measurement and terminates itself once the process with the given ID goes away. Example:
 
 ```text
