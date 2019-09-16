@@ -291,7 +291,7 @@ def inspect_data_file():
 
         _gattr = _gattr_maker(table.attrs)
         print(
-            f'Measurement meta data:\n'
+            f'Measurement metadata:\n'
             f'  Created with: Goeffel {_gattr("software_version", strict=False)}\n'
             f'  System hostname: {_gattr("system_hostname")}\n'
             f'  Invocation time (local): {_gattr("invocation_time_local")}\n'
