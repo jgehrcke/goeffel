@@ -191,7 +191,7 @@ persisting the collected time series data on disk for later inspection.
 
 The program [psrecord](https://github.com/astrofrog/psrecord) (which effectively
 wraps [psutil](https://psutil.readthedocs.io/en/latest/)) has a similar
-fundamental approach as Goeffel; it however only , and
+fundamental approach as Goeffel; it however only measures few metrics, and
 it does not have a clear separation of concerns between persisting the data to
 disk, performing the measurement itself, and analyzing/plotting the data.
 
