@@ -93,7 +93,7 @@ This is useful for longevity experiments where the monitored process occasionall
 
 ## `goeffel-analysis`: data inspection and visualization
 
-**Note**: `goeffel-analysis` provides an opinionated and limited approach to visualizing data. For advanced and thorough data analysis I recommend building a custom (maybe even ad-hoc!) data analysis pipeline using `pandas` and `matplotlib`, or using the tooling of your choice.
+**Note**: `goeffel-analysis` provides an opinionated and limited approach to visualizing data. For advanced and thorough data analysis I recommend building a custom (maybe even ad-hoc) data analysis pipeline using `pandas` and `matplotlib`, or using the tooling of your choice.
 
 **Also note**: The command line interface provided by `goeffel-analysis`,
 especially for the plot commands, might change in the future. Suggestions for
@@ -365,7 +365,7 @@ Momentary state at sampling time.
 Various memory usage metrics of the monitored process. See the [psutil
 docs](https://psutil.readthedocs.io/en/release-5.3.0/#psutil.Process.memory_info)
 for a quick summary of what the values mean. However, note that the values need
-careful interpretation, as is hopefully obvious from discussions like
+careful interpretation, as shown by discussions like
 [this](https://serverfault.com/q/138427) and
 [this](https://serverfault.com/q/138427).
 
