@@ -162,7 +162,7 @@ def parse_cmdline_args():
 
     spparser = subparsers.add_parser('plot', help='Simple, opinionated plot (magic!)')
     spparser.add_argument(
-        'datafile_for_magicplot',
+        'datafile_for_simpleplot',
         metavar='PATH',
         help='Goeffel data file containing process and system metrics.'
     )
@@ -354,7 +354,7 @@ def cmd_simpleplot():
             'schniepel_timeseries',
             'messer_timeseries'
         ]
-        with tables.open_file(ARGS.datafile_for_magicplot, 'r') as hdf5file:
+        with tables.open_file(ARGS.datafile_for_simpleplot, 'r') as hdf5file:
             # Rely on this being a valid HDF5 file, one key will match.
             for key in keys_to_try:
                 if hasattr(hdf5file.root, key):
@@ -365,7 +365,7 @@ def cmd_simpleplot():
         return table_metadata
 
     dataframe = parse_hdf5file_into_dataframe(
-        ARGS.datafile_for_magicplot,
+        ARGS.datafile_for_simpleplot,
         # startrow=ARGS.tail,
         # stoprow=ARGS.head,
         first=ARGS.first,
