@@ -1,4 +1,9 @@
 
+## 0.3.0-dev
+
+- Renamed `magic` command to `plot`, and `plot` to `flexplot`.
+
+
 ## 0.2.0 (2019-08-13)
 
 Renamed to Goeffel.
