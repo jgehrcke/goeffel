@@ -443,9 +443,16 @@ def plot_simple_magic(dataframe, metadata):
         fontsize=13
     )
 
+    subtitle = f'hostname: {_metadata("system_hostname")}, '
+    if _metadata("pid_command") is None:
+        subtitle += f'PID: {_metadata("pid")}, '
+    else:
+        subtitle += f'PID command: {_metadata("pid_command")}, '
+    subtitle += f'sampling interval: {_metadata("sampling_interval_seconds")} s'
+
     fig.text(
         0.5, 0.970,
-        f'hostname: {_metadata("system_hostname")}, PID command: {_metadata("pid_command")}',
+        subtitle,
         verticalalignment='center',
         horizontalalignment='center',
         fontsize=10,
@@ -579,7 +586,7 @@ def plot_simple_magic(dataframe, metadata):
 
     # plt.tight_layout()
 
-    savefig(f'goeffel_magicplot_{metadata.system_hostname}_{metadata.invocation_time_local}')
+    savefig(f'goeffel_simpleplot_{metadata.system_hostname}_{metadata.invocation_time_local}')
 
     # Return matplotlib figure object for further processing for interactive
     # mode.
