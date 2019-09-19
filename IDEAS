@@ -25,12 +25,6 @@
 ## goeffel-analysis
 
 - control log level with command line flag
-- magic:
-    - do not show system 1 min load avg by default. show less by default, so
-      that it is easy to use the magic command.
-    - show some memory usage over time by default
-    - rename 'magic', so that it's less magic?
-    - in magicplot show PID if no PID command was provided
 - add argument to simpleplot (magic) to set rolling window size
 
 
