@@ -1,7 +1,10 @@
 
 ## 0.3.0-dev
 
+`goeffel-analysis`:
+
 - Renamed `magic` command to `plot`, and `plot` to `flexplot`.
+- `plot`: new default metric `proc_mem_rss_percent`.
 
 
 ## 0.2.0 (2019-08-13)

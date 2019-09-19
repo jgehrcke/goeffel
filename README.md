@@ -354,7 +354,8 @@ Mean over the past sampling interval.
 #### `proc_mem_rss_percent`
 
 Fraction of process [resident set size](https://stackoverflow.com/a/21049737)
-(RSS) relative to the machine's physical memory size in `percent`.
+(RSS) relative to the machine's physical memory size in `percent`. This is
+equivalent to what `top` shows in the `%MEM` column.
 
 Momentary state at sampling time.
 
