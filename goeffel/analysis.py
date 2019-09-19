@@ -916,12 +916,12 @@ def parse_hdf5file_into_dataframe(
 
 
 def savefig(title):
-    today = datetime.now().strftime('%Y-%m-%d')
+    # today = datetime.now().strftime('%Y-%m-%d')
 
     # Lowercase, replace special chars with whitespace, join on whitespace.
     cleantitle = '-'.join(re.sub('[^a-z0-9]+', ' ', title.lower()).split())
 
-    fname = today + '_' + cleantitle
+    fname = cleantitle
     fpath_cmd = fname + '.command'
 
     log.info('Writing command to %s', fpath_cmd)
