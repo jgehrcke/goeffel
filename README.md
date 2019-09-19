@@ -127,28 +127,28 @@ Column names:
   system_mem_inactive
 ```
 
-### `goeffel-analysis magic`: quickly plot data from a single time series file
+### `goeffel-analysis plot`: quickly plot data from a single time series file
 
-The `goeffel-analysis magic <path-to-hdf5-file>` command plots a pre-selected
+The `goeffel-analysis plot <path-to-hdf5-file>` command plots a pre-selected
 set of metrics in an opinionated way. More metrics can be added to the plot with
 the `--metric <metric-name>` option. Example command:
 
 ```bash
-goeffel-analysis magic \
+goeffel-analysis plot \
   mwst18-master2-mesosmaster_20190801_112136.hdf5 \
   --metric proc_num_ip_sockets_open
 ```
 Example output figure:
-![goeffel-analysis magic example output image](docs/figs/analysis_magic_example_small.png?raw=true "goeffel-analysis magic example")
+![goeffel-analysis plot example output image](docs/figs/analysis_magic_example_small.png?raw=true "goeffel-analysis plot example")
 
-### `goeffel-analysis plot`: generic plot command
+### `goeffel-analysis flexplot`: generic plot command
 
 This command can be used for example for comparing multiple time series.
 Say you have monitored the same program across multiple replicas in a distributed system and would like to compare the time evolution of a certain metric across these replicas.
-Then the `goeffel-analysis plot` command is here to help, invoked with multiple `--series` arguments:
+Then the `goeffel-analysis flexplot` command is here to help, invoked with multiple `--series` arguments:
 
 ```bash
-$ goeffel-analysis plot \
+$ goeffel-analysis flexplot \
   --series mwst18-master1-journal_20190801_111952.hdf5 master1 \
   --series mwst18-master2-journal_20190801_112136.hdf5 master2 \
   --series mwst18-master3-journal_20190801_112141.hdf5 master3 \
@@ -163,7 +163,7 @@ $ goeffel-analysis plot \
 ```
 
 Example output figure:
-![goeffel-analysis plot example output image](docs/figs/analysis_plot_example_small.png?raw=true "goeffel-analysis plot example")
+![goeffel-analysis flexplot example output image](docs/figs/analysis_plot_example_small.png?raw=true "goeffel-analysis flexplot example")
 
 
 # Background and details
