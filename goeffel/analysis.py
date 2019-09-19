@@ -399,10 +399,10 @@ def plot_simple_magic(dataframe, metadata):
 
     columns_to_plot = [
         'proc_cpu_util_percent_total',
+        'proc_mem_rss_percent',
         'proc_disk_read_rate_hz',
         'proc_disk_write_rate_hz',
         'proc_disk_write_throughput_mibps',
-        'system_loadavg1',
     ]
 
     _metadata = _gattr_maker(metadata)
