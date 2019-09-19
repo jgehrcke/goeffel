@@ -1,8 +1,23 @@
 ## Data collection
 
+- Add option for running the command, instead of requiring it to exist in the
+  first place. Might be useful for short-lived processes.
+
 - Use eBPF for acquiring advanced kernel statistics:
     - https://pypi.org/project/pyebpf/
     - https://github.com/iovisor/bcc
+
+- Explore collecting Unique Set Size (USS): probably has quite the performance
+  impact, see
+    - https://psutil.readthedocs.io/en/release-5.3.0/#psutil.Process.memory_info
+    - http://grodola.blogspot.com/2016/02/psutil-4-real-process-memory-and-environ.html
+    - https://github.com/astrofrog/psrecord/issues/48
+
+- disk write latency: use BPF stuff for getting *max*, and for comparison *mean*,
+  for starters. Just the mean is not saying anything, need more data about
+  the actual distribution.
+  See https://github.com/cloudflare/ebpf_exporter/blob/master/examples/bio.yaml
+
 
 
 ## Data emission
@@ -13,6 +28,7 @@
 ## goeffel-analysis
 
 - control log level with command line flag
+- add argument to simpleplot (magic) to set rolling window size
 
 
 ## Ideas for walk-through / tutorial / blog:

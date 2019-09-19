@@ -69,6 +69,11 @@ COLUMN_PLOT_CONFIGS = {
         'plot_title': 'foo',
         'rolling_wdw_width_seconds': 0,
     },
+    'proc_mem_rss_percent': {
+         'y_label': 'Process RSS mem [%]',
+         'plot_title': 'foo',
+         'rolling_wdw_width_seconds': 5
+    },
     'system_loadavg1': {
         'y_label': 'System 1 min load avg',
         'plot_title': 'foo',
@@ -104,11 +109,11 @@ def main():
     log.debug('Import big packages')
     lazy_load_big_packages()
 
-    if ARGS.command == 'magic':
-        cmd_magic()
+    if ARGS.command == 'plot':
+        cmd_simpleplot()
         sys.exit(0)
 
-    if ARGS.command == 'plot':
+    if ARGS.command == 'flexplot':
 
         # What follows is super useful functionality but this should be properly
         # abstracted in a nicer way .... in a cleaner subcommand?
@@ -135,7 +140,7 @@ def main():
 
 def parse_cmdline_args():
 
-    description = 'Process and plot one or multiple time series created with Goeffel'
+    description = 'Process time series measured with Goeffel'
 
     parser = argparse.ArgumentParser(
         description=description,
@@ -155,14 +160,14 @@ def parse_cmdline_args():
         help='Path to Goeffel data file.',
     )
 
-    magicparser = subparsers.add_parser('magic', help='Magic ;]')
-    magicparser.add_argument(
-        'datafile_for_magicplot',
+    spparser = subparsers.add_parser('plot', help='Simple, opinionated plot (magic!)')
+    spparser.add_argument(
+        'datafile_for_simpleplot',
         metavar='PATH',
         help='Goeffel data file containing process and system metrics.'
     )
     # Allow only _one_ of the following four options.
-    meg = magicparser.add_mutually_exclusive_group()
+    meg = spparser.add_mutually_exclusive_group()
     meg.add_argument(
         '--first',
         metavar='TIME OFFSET STRING',
@@ -192,19 +197,19 @@ def parse_cmdline_args():
        help='Analyze only the last N rows of the data table.'
     )
 
-    magicparser.add_argument(
+    spparser.add_argument(
         '--metric',
         metavar='METRIC_NAME',
         action='append'
     )
 
-    magicparser.add_argument(
+    spparser.add_argument(
         '--interactive-plot',
         action='store_true'
     )
 
-    plotparser = subparsers.add_parser('plot', help='Plot data in a flexible manner')
-    plotparser.add_argument(
+    fpparser = subparsers.add_parser('flexplot', help='Plot data in a flexible manner')
+    fpparser.add_argument(
         '--series',
         nargs=2,
         metavar=('DATAFILE_PATH', 'DATASET_LABEL'),
@@ -213,7 +218,7 @@ def parse_cmdline_args():
         help='Data file containing one or multiple time series (column(s))'
     )
 
-    plotparser.add_argument(
+    fpparser.add_argument(
         '--column',
         nargs=4,
         metavar=('COLUMN_NAME', 'Y_LABEL', 'PLOT_TITLE', 'ROLLING_WINDOW_WIDTH_SECONDS'),
@@ -225,21 +230,21 @@ def parse_cmdline_args():
         )
     )
 
-    plotparser.add_argument(
+    fpparser.add_argument(
         '--subtitle',
         default='Default subtitle -- measured with Goeffel',
         help='Set plot subtitle'
     )
-    plotparser.add_argument('--samescale', action='store_true', default=True)
-    plotparser.add_argument('--legend-loc')
-    plotparser.add_argument('--show-legend-in-plot', default=1, type=int)
-    plotparser.add_argument(
+    fpparser.add_argument('--samescale', action='store_true', default=True)
+    fpparser.add_argument('--legend-loc')
+    fpparser.add_argument('--show-legend-in-plot', default=1, type=int)
+    fpparser.add_argument(
         '--normalization-factor',
         default=0,
         type=float,
         help='All values are divided by this number.'
     )
-    plotparser.add_argument(
+    fpparser.add_argument(
         '--custom-y-limit',
         nargs=2,
         type=float,
@@ -330,7 +335,7 @@ def lazy_load_big_packages():
     plt.style.use('ggplot')
 
 
-def cmd_magic():
+def cmd_simpleplot():
     # Note(JP): using --tail / --head / --first / --last can also be used to
     # speed up parsing.
     # dataframe = parse_hdf5file_into_dataframe(ARGS.datafile_for_magicplot)
@@ -349,7 +354,7 @@ def cmd_magic():
             'schniepel_timeseries',
             'messer_timeseries'
         ]
-        with tables.open_file(ARGS.datafile_for_magicplot, 'r') as hdf5file:
+        with tables.open_file(ARGS.datafile_for_simpleplot, 'r') as hdf5file:
             # Rely on this being a valid HDF5 file, one key will match.
             for key in keys_to_try:
                 if hasattr(hdf5file.root, key):
@@ -360,7 +365,7 @@ def cmd_magic():
         return table_metadata
 
     dataframe = parse_hdf5file_into_dataframe(
-        ARGS.datafile_for_magicplot,
+        ARGS.datafile_for_simpleplot,
         # startrow=ARGS.tail,
         # stoprow=ARGS.head,
         first=ARGS.first,
@@ -369,7 +374,7 @@ def cmd_magic():
 
     metadata = get_table_metadata()
 
-    fig, custom_tight_layout_func = plot_magic(dataframe, metadata)
+    fig, custom_tight_layout_func = plot_simple_magic(dataframe, metadata)
 
     # Apply custom "tight layout" routine after resize. This is when the user
     # actually resizes the figure window or, more importantly, upon first draw
@@ -383,18 +388,21 @@ def cmd_magic():
         plt.show()
 
 
-def plot_magic(dataframe, metadata):
+def plot_simple_magic(dataframe, metadata):
     """
     Create a single figure with multiple subplots. Each subplot comes from a
     different column in the same dataframe.
+
+    This is an opinionated plot enriched with a number of again opinionated
+    details that ideally comes across as magic, nice.
     """
 
     columns_to_plot = [
         'proc_cpu_util_percent_total',
+        'proc_mem_rss_percent',
         'proc_disk_read_rate_hz',
         'proc_disk_write_rate_hz',
         'proc_disk_write_throughput_mibps',
-        'system_loadavg1',
     ]
 
     _metadata = _gattr_maker(metadata)
@@ -435,9 +443,16 @@ def plot_magic(dataframe, metadata):
         fontsize=13
     )
 
+    subtitle = f'hostname: {_metadata("system_hostname")}, '
+    if _metadata("pid_command") is None:
+        subtitle += f'PID: {_metadata("pid")}, '
+    else:
+        subtitle += f'PID command: {_metadata("pid_command")}, '
+    subtitle += f'sampling interval: {_metadata("sampling_interval_seconds")} s'
+
     fig.text(
         0.5, 0.970,
-        f'hostname: {_metadata("system_hostname")}, PID command: {_metadata("pid_command")}',
+        subtitle,
         verticalalignment='center',
         horizontalalignment='center',
         fontsize=10,
@@ -571,7 +586,7 @@ def plot_magic(dataframe, metadata):
 
     # plt.tight_layout()
 
-    savefig(f'goeffel_magicplot_{metadata.system_hostname}_{metadata.invocation_time_local}')
+    savefig(f'goeffel_simpleplot_{metadata.system_hostname}_{metadata.invocation_time_local}')
 
     # Return matplotlib figure object for further processing for interactive
     # mode.
@@ -908,12 +923,12 @@ def parse_hdf5file_into_dataframe(
 
 
 def savefig(title):
-    today = datetime.now().strftime('%Y-%m-%d')
+    # today = datetime.now().strftime('%Y-%m-%d')
 
     # Lowercase, replace special chars with whitespace, join on whitespace.
     cleantitle = '-'.join(re.sub('[^a-z0-9]+', ' ', title.lower()).split())
 
-    fname = today + '_' + cleantitle
+    fname = cleantitle
     fpath_cmd = fname + '.command'
 
     log.info('Writing command to %s', fpath_cmd)
