@@ -1,5 +1,8 @@
 ## Data collection
 
+- Add option for running the command, instead of requiring it to exist in the
+  first place. Might be useful for short-lived processes.
+
 - Use eBPF for acquiring advanced kernel statistics:
     - https://pypi.org/project/pyebpf/
     - https://github.com/iovisor/bcc
