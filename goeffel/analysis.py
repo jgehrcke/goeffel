@@ -104,11 +104,11 @@ def main():
     log.debug('Import big packages')
     lazy_load_big_packages()
 
-    if ARGS.command == 'magic':
-        cmd_magic()
+    if ARGS.command == 'plot':
+        cmd_simpleplot()
         sys.exit(0)
 
-    if ARGS.command == 'plot':
+    if ARGS.command == 'flexplot':
 
         # What follows is super useful functionality but this should be properly
         # abstracted in a nicer way .... in a cleaner subcommand?
@@ -135,7 +135,7 @@ def main():
 
 def parse_cmdline_args():
 
-    description = 'Process and plot one or multiple time series created with Goeffel'
+    description = 'Process time series measured with Goeffel'
 
     parser = argparse.ArgumentParser(
         description=description,
@@ -155,14 +155,14 @@ def parse_cmdline_args():
         help='Path to Goeffel data file.',
     )
 
-    magicparser = subparsers.add_parser('magic', help='Magic ;]')
-    magicparser.add_argument(
+    spparser = subparsers.add_parser('plot', help='Simple, opinionated plot (magic!)')
+    spparser.add_argument(
         'datafile_for_magicplot',
         metavar='PATH',
         help='Goeffel data file containing process and system metrics.'
     )
     # Allow only _one_ of the following four options.
-    meg = magicparser.add_mutually_exclusive_group()
+    meg = spparser.add_mutually_exclusive_group()
     meg.add_argument(
         '--first',
         metavar='TIME OFFSET STRING',
@@ -192,19 +192,19 @@ def parse_cmdline_args():
        help='Analyze only the last N rows of the data table.'
     )
 
-    magicparser.add_argument(
+    spparser.add_argument(
         '--metric',
         metavar='METRIC_NAME',
         action='append'
     )
 
-    magicparser.add_argument(
+    spparser.add_argument(
         '--interactive-plot',
         action='store_true'
     )
 
-    plotparser = subparsers.add_parser('plot', help='Plot data in a flexible manner')
-    plotparser.add_argument(
+    fpparser = subparsers.add_parser('flexplot', help='Plot data in a flexible manner')
+    fpparser.add_argument(
         '--series',
         nargs=2,
         metavar=('DATAFILE_PATH', 'DATASET_LABEL'),
@@ -213,7 +213,7 @@ def parse_cmdline_args():
         help='Data file containing one or multiple time series (column(s))'
     )
 
-    plotparser.add_argument(
+    fpparser.add_argument(
         '--column',
         nargs=4,
         metavar=('COLUMN_NAME', 'Y_LABEL', 'PLOT_TITLE', 'ROLLING_WINDOW_WIDTH_SECONDS'),
@@ -225,21 +225,21 @@ def parse_cmdline_args():
         )
     )
 
-    plotparser.add_argument(
+    fpparser.add_argument(
         '--subtitle',
         default='Default subtitle -- measured with Goeffel',
         help='Set plot subtitle'
     )
-    plotparser.add_argument('--samescale', action='store_true', default=True)
-    plotparser.add_argument('--legend-loc')
-    plotparser.add_argument('--show-legend-in-plot', default=1, type=int)
-    plotparser.add_argument(
+    fpparser.add_argument('--samescale', action='store_true', default=True)
+    fpparser.add_argument('--legend-loc')
+    fpparser.add_argument('--show-legend-in-plot', default=1, type=int)
+    fpparser.add_argument(
         '--normalization-factor',
         default=0,
         type=float,
         help='All values are divided by this number.'
     )
-    plotparser.add_argument(
+    fpparser.add_argument(
         '--custom-y-limit',
         nargs=2,
         type=float,
@@ -330,7 +330,7 @@ def lazy_load_big_packages():
     plt.style.use('ggplot')
 
 
-def cmd_magic():
+def cmd_simpleplot():
     # Note(JP): using --tail / --head / --first / --last can also be used to
     # speed up parsing.
     # dataframe = parse_hdf5file_into_dataframe(ARGS.datafile_for_magicplot)
@@ -369,7 +369,7 @@ def cmd_magic():
 
     metadata = get_table_metadata()
 
-    fig, custom_tight_layout_func = plot_magic(dataframe, metadata)
+    fig, custom_tight_layout_func = plot_simple_magic(dataframe, metadata)
 
     # Apply custom "tight layout" routine after resize. This is when the user
     # actually resizes the figure window or, more importantly, upon first draw
@@ -383,10 +383,13 @@ def cmd_magic():
         plt.show()
 
 
-def plot_magic(dataframe, metadata):
+def plot_simple_magic(dataframe, metadata):
     """
     Create a single figure with multiple subplots. Each subplot comes from a
     different column in the same dataframe.
+
+    This is an opinionated plot enriched with a number of again opinionated
+    details that ideally comes across as magic, nice.
     """
 
     columns_to_plot = [
