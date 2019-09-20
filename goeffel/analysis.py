@@ -35,9 +35,10 @@ from datetime import datetime
 
 logfmt = "%(asctime)s.%(msecs)03d %(levelname)s: %(message)s"
 datefmt = "%y%m%d-%H:%M:%S"
-logging.basicConfig(format=logfmt, datefmt=datefmt, level=logging.DEBUG)
+logging.basicConfig(format=logfmt, datefmt=datefmt, level=logging.INFO)
 log = logging.getLogger()
 logging.getLogger('matplotlib').setLevel('INFO')
+logging.getLogger('numexpr').setLevel('ERROR')
 
 
 COLUMN_PLOT_CONFIGS = {
