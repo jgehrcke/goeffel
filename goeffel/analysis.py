@@ -397,6 +397,7 @@ def cmd_simpleplot():
     _ = fig.canvas.mpl_connect('resize_event', custom_tight_layout_func)
 
     if ARGS.interactive_plot:
+        log.info('Draw figure window')
         plt.show()
 
 
@@ -449,18 +450,19 @@ def plot_simple_magic(dataframe, metadata):
 
     fig.text(
         0.5, 0.985,
-        f'Goeffel time series ({metadata.invocation_time_local})',
+        f'Goeffel time series plot ({metadata.invocation_time_local})',
         verticalalignment='center',
         horizontalalignment='center',
-        fontsize=13
+        fontsize=11
     )
 
     subtitle = f'hostname: {_metadata("system_hostname")}, '
+    subtitle += f'sampling interval: {_metadata("sampling_interval_seconds")} s, '
     if _metadata("pid_command") is None:
-        subtitle += f'PID: {_metadata("pid")}, '
+        subtitle += f'PID: {_metadata("pid")}'
     else:
-        subtitle += f'PID command: {_metadata("pid_command")}, '
-    subtitle += f'sampling interval: {_metadata("sampling_interval_seconds")} s'
+        subtitle += f'PID command: {_metadata("pid_command")}'
+
 
     fig.text(
         0.5, 0.970,
