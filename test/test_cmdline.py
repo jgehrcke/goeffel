@@ -65,7 +65,7 @@ def test_pid_command_simple(clitest, testprocess):
 def test_hdf5_path_prefix_default(clitest, testprocess):
     clitest.run(f"goeffel --pid {testprocess.pid} -i 0.3 -t 1")
     clitest.expect_filename_pattern(
-        r'^goeffel-timeseries__[0-9]+_[0-9]+\.hdf5$')
+        r'^goeffel-timeseries__[0-9]+-[0-9]+\.hdf5$')
 
 
 def test_hdf5_path_with_label(clitest, testprocess):
@@ -74,7 +74,7 @@ def test_hdf5_path_with_label(clitest, testprocess):
         "--label custom-label"
     )
     clitest.expect_filename_pattern(
-        r'^goeffel-timeseries_custom-label_[0-9]+_[0-9]+\.hdf5$')
+        r'^goeffel-timeseries_custom-label_[0-9]+-[0-9]+\.hdf5$')
 
 
 def test_hdf5_path_prefix_custom(clitest, testprocess):
@@ -83,7 +83,7 @@ def test_hdf5_path_prefix_custom(clitest, testprocess):
         "--outfile-hdf5-path-prefix custom_prefix"
     )
     clitest.expect_filename_pattern(
-        r'^custom_prefix__[0-9]+_[0-9]+\.hdf5$')
+        r'^custom_prefix__[0-9]+-[0-9]+\.hdf5$')
 
 
 def test_hdf5_path_prefix_custom_and_label(clitest, testprocess):
@@ -92,7 +92,7 @@ def test_hdf5_path_prefix_custom_and_label(clitest, testprocess):
         "--outfile-hdf5-path-prefix custom_prefix --label custom-label"
     )
     clitest.expect_filename_pattern(
-        r'^custom_prefix_custom-label_[0-9]+_[0-9]+\.hdf5$')
+        r'^custom_prefix_custom-label_[0-9]+-[0-9]+\.hdf5$')
 
 
 def test_hdf5_opt_collision(clitest, testprocess):
