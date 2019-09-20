@@ -41,39 +41,40 @@ logging.getLogger('matplotlib').setLevel('INFO')
 logging.getLogger('numexpr').setLevel('ERROR')
 
 
+RWWS_DEFAULT = 10
 COLUMN_PLOT_CONFIGS = {
     'proc_cpu_util_percent_total': {
         'y_label': 'Proc CPU util (total) [%]',
         'plot_title': 'foo',
-        'rolling_wdw_width_seconds': 5,
+        'rolling_wdw_width_seconds': RWWS_DEFAULT,
     },
     'proc_disk_read_rate_hz': {
         'y_label': 'Proc read() rate [Hz]',
         'plot_title': 'foo',
-        'rolling_wdw_width_seconds': 5,
+        'rolling_wdw_width_seconds': RWWS_DEFAULT,
         'yscale': 'symlog'
     },
     'proc_disk_write_rate_hz': {
         'y_label': 'Proc write() rate [Hz]',
         'plot_title': 'foo',
-        'rolling_wdw_width_seconds': 5,
+        'rolling_wdw_width_seconds': RWWS_DEFAULT,
         'yscale': 'symlog'
     },
     'proc_disk_write_throughput_mibps': {
         'y_label': 'Proc write() tp [MiB/s]',
         'plot_title': 'foo',
-        'rolling_wdw_width_seconds': 5,
+        'rolling_wdw_width_seconds': RWWS_DEFAULT,
         'yscale': 'symlog'
     },
     'proc_num_ip_sockets_open': {
         'y_label': 'Proc IP socket count',
         'plot_title': 'foo',
-        'rolling_wdw_width_seconds': 0,
+        'rolling_wdw_width_seconds': RWWS_DEFAULT,
     },
     'proc_mem_rss_percent': {
          'y_label': 'Proc RSS mem [%]',
          'plot_title': 'foo',
-         'rolling_wdw_width_seconds': 5
+         'rolling_wdw_width_seconds': RWWS_DEFAULT
     },
     'system_loadavg1': {
         'y_label': 'System 1 min load avg',
@@ -83,12 +84,12 @@ COLUMN_PLOT_CONFIGS = {
     'disk_DEVNAME_util_percent': {
         'y_label': 'DEVNAME util [%]',
         'plot_title': 'foo',
-        'rolling_wdw_width_seconds': 5
+        'rolling_wdw_width_seconds': RWWS_DEFAULT
     },
     'disk_DEVNAME_write_latency_ms': {
          'y_label': 'DEVNAME wl [ms]',
          'plot_title': 'foo',
-         'rolling_wdw_width_seconds': 5
+         'rolling_wdw_width_seconds': RWWS_DEFAULT
     },
 }
 
