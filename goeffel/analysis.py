@@ -170,17 +170,17 @@ def parse_cmdline_args():
     meg = spparser.add_mutually_exclusive_group()
     meg.add_argument(
         '--first',
-        metavar='TIME OFFSET STRING',
+        metavar='TIME_OFFSET_STRING',
         help=(
-            'Analyze the first part of the time series data. '
+            'Plot only the first part of the time series data. '
             'Use pandas time offset string (such as 2D, meaning two days).'
         )
     )
     meg.add_argument(
         '--last',
-        metavar='TIME OFFSET STRING',
+        metavar='TIME_OFFSET_STRING',
         help=(
-            'Analyze the list part of the time series data. Use pandas '
+            'Plot only the last part of the time series data. Use pandas '
             'time offset string (such as 2D, meaning two days).'
         )
     )
@@ -188,19 +188,29 @@ def parse_cmdline_args():
        '--head',
        metavar='N',
        type=int,
-       help='Analyze only the first N rows of the data table.'
+       # This requires a rather new pandas with my patch, and is not yet
+       # well thought through. Do not document for now.
+       # help='Analyze only the first N rows of the data table.',
+       help=argparse.SUPPRESS
     )
     meg.add_argument(
        '--tail',
        metavar='N',
        type=int,
-       help='Analyze only the last N rows of the data table.'
+       # This requires a rather new pandas with my patch, and is not yet
+       # well thought through. Do not document for now.
+       # help='Analyze only the last N rows of the data table.',
+       help=argparse.SUPPRESS
     )
 
     spparser.add_argument(
         '--metric',
         metavar='METRIC_NAME',
-        action='append'
+        action='append',
+        help=(
+            'In addition to the (opinionated) default set of metrics plotted '
+            'in the output figure also plot this.'
+        )
     )
 
     spparser.add_argument(
