@@ -59,7 +59,7 @@ import tables
 import psutil
 
 
-__version__ = "0.3.0-dev"
+__version__ = "0.3.0"
 
 
 # If the program is invoked with a PID command and the process goes away then
@@ -97,10 +97,11 @@ OUTFILE_PATH_HDF5 = None
 ARGS = None
 
 # Record invocation time (is consumed in various places, e.g. written to the
-# HDF5 metadata).
+# HDF5 metadata). Note(JP): I replaced an underscore here with a dash for
+# cosmetical reasons (typography inplot title, for example).
 INVOCATION_TIME_UNIX_TIMESTAMP = time.time()
 INVOCATION_TIME_LOCAL_STRING = datetime.fromtimestamp(
-    INVOCATION_TIME_UNIX_TIMESTAMP).strftime(format='%Y%m%d_%H%M%S')
+    INVOCATION_TIME_UNIX_TIMESTAMP).strftime(format='%Y%m%d-%H%M%S')
 
 
 log = logging.getLogger()

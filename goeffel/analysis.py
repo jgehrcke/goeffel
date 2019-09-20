@@ -35,59 +35,52 @@ from datetime import datetime
 
 logfmt = "%(asctime)s.%(msecs)03d %(levelname)s: %(message)s"
 datefmt = "%y%m%d-%H:%M:%S"
-logging.basicConfig(format=logfmt, datefmt=datefmt, level=logging.DEBUG)
+logging.basicConfig(format=logfmt, datefmt=datefmt, level=logging.INFO)
 log = logging.getLogger()
 logging.getLogger('matplotlib').setLevel('INFO')
+logging.getLogger('numexpr').setLevel('ERROR')
 
 
+RWWS_DEFAULT = 10
 COLUMN_PLOT_CONFIGS = {
     'proc_cpu_util_percent_total': {
-        'y_label': 'Process CPU util (total) [%]',
-        'plot_title': 'foo',
-        'rolling_wdw_width_seconds': 5,
+        'y_label': 'Proc CPU util (total) [%]',
+        'rolling_wdw_width_seconds': RWWS_DEFAULT,
     },
     'proc_disk_read_rate_hz': {
-        'y_label': 'Process read() rate [Hz]',
-        'plot_title': 'foo',
-        'rolling_wdw_width_seconds': 5,
+        'y_label': 'Proc read() rate [Hz]',
+        'rolling_wdw_width_seconds': RWWS_DEFAULT,
         'yscale': 'symlog'
     },
     'proc_disk_write_rate_hz': {
-        'y_label': 'Process write() rate [Hz]',
-        'plot_title': 'foo',
-        'rolling_wdw_width_seconds': 5,
+        'y_label': 'Proc write() rate [Hz]',
+        'rolling_wdw_width_seconds': RWWS_DEFAULT,
         'yscale': 'symlog'
     },
     'proc_disk_write_throughput_mibps': {
-        'y_label': 'Process write() tp [MiB/s]',
-        'plot_title': 'foo',
-        'rolling_wdw_width_seconds': 5,
+        'y_label': 'Proc write() tp [MiB/s]',
+        'rolling_wdw_width_seconds': RWWS_DEFAULT,
         'yscale': 'symlog'
     },
     'proc_num_ip_sockets_open': {
-        'y_label': 'Process IP socket count',
-        'plot_title': 'foo',
-        'rolling_wdw_width_seconds': 0,
+        'y_label': 'Proc IP socket count',
+        'rolling_wdw_width_seconds': RWWS_DEFAULT,
     },
     'proc_mem_rss_percent': {
-         'y_label': 'Process RSS mem [%]',
-         'plot_title': 'foo',
-         'rolling_wdw_width_seconds': 5
+         'y_label': 'Proc RSS mem [%]',
+         'rolling_wdw_width_seconds': RWWS_DEFAULT
     },
     'system_loadavg1': {
         'y_label': 'System 1 min load avg',
-        'plot_title': 'foo',
         'rolling_wdw_width_seconds': 0
     },
     'disk_DEVNAME_util_percent': {
         'y_label': 'DEVNAME util [%]',
-        'plot_title': 'foo',
-        'rolling_wdw_width_seconds': 5
+        'rolling_wdw_width_seconds': RWWS_DEFAULT
     },
     'disk_DEVNAME_write_latency_ms': {
          'y_label': 'DEVNAME wl [ms]',
-         'plot_title': 'foo',
-         'rolling_wdw_width_seconds': 5
+         'rolling_wdw_width_seconds': RWWS_DEFAULT
     },
 }
 
@@ -170,17 +163,17 @@ def parse_cmdline_args():
     meg = spparser.add_mutually_exclusive_group()
     meg.add_argument(
         '--first',
-        metavar='TIME OFFSET STRING',
+        metavar='TIME_OFFSET_STRING',
         help=(
-            'Analyze the first part of the time series data. '
+            'Plot only the first part of the time series data. '
             'Use pandas time offset string (such as 2D, meaning two days).'
         )
     )
     meg.add_argument(
         '--last',
-        metavar='TIME OFFSET STRING',
+        metavar='TIME_OFFSET_STRING',
         help=(
-            'Analyze the list part of the time series data. Use pandas '
+            'Plot only the last part of the time series data. Use pandas '
             'time offset string (such as 2D, meaning two days).'
         )
     )
@@ -188,19 +181,29 @@ def parse_cmdline_args():
        '--head',
        metavar='N',
        type=int,
-       help='Analyze only the first N rows of the data table.'
+       # This requires a rather new pandas with my patch, and is not yet
+       # well thought through. Do not document for now.
+       # help='Analyze only the first N rows of the data table.',
+       help=argparse.SUPPRESS
     )
     meg.add_argument(
        '--tail',
        metavar='N',
        type=int,
-       help='Analyze only the last N rows of the data table.'
+       # This requires a rather new pandas with my patch, and is not yet
+       # well thought through. Do not document for now.
+       # help='Analyze only the last N rows of the data table.',
+       help=argparse.SUPPRESS
     )
 
     spparser.add_argument(
         '--metric',
         metavar='METRIC_NAME',
-        action='append'
+        action='append',
+        help=(
+            'In addition to the (opinionated) default set of metrics plotted '
+            'in the output figure also plot this.'
+        )
     )
 
     spparser.add_argument(
@@ -385,6 +388,7 @@ def cmd_simpleplot():
     _ = fig.canvas.mpl_connect('resize_event', custom_tight_layout_func)
 
     if ARGS.interactive_plot:
+        log.info('Draw figure window')
         plt.show()
 
 
@@ -437,18 +441,18 @@ def plot_simple_magic(dataframe, metadata):
 
     fig.text(
         0.5, 0.985,
-        f'Goeffel time series ({metadata.invocation_time_local})',
+        f'Goeffel time series plot ({metadata.invocation_time_local})',
         verticalalignment='center',
         horizontalalignment='center',
-        fontsize=13
+        fontsize=11
     )
 
     subtitle = f'hostname: {_metadata("system_hostname")}, '
+    subtitle += f'sampling interval: {_metadata("sampling_interval_seconds")} s, '
     if _metadata("pid_command") is None:
-        subtitle += f'PID: {_metadata("pid")}, '
+        subtitle += f'PID: {_metadata("pid")}'
     else:
-        subtitle += f'PID command: {_metadata("pid_command")}, '
-    subtitle += f'sampling interval: {_metadata("sampling_interval_seconds")} s'
+        subtitle += f'PID command: {_metadata("pid_command")}'
 
     fig.text(
         0.5, 0.970,
@@ -698,7 +702,7 @@ def plot_column_multiple_subplots(dataframe_label_pairs, column_dict):
     plt.subplots_adjust(
         hspace=0.05, left=0.05, right=0.97, bottom=0.1, top=0.95)
     # plt.tight_layout()
-    savefig(column_dict['plot_title'])
+    savefig(column_dict['plot_title'], prefixtoday=True)
 
 
 def plot_subplot(ax, column_plot_config, series, plotsettings):
@@ -922,13 +926,16 @@ def parse_hdf5file_into_dataframe(
     return df
 
 
-def savefig(title):
-    # today = datetime.now().strftime('%Y-%m-%d')
+def savefig(title, prefixtoday=False):
+    today = datetime.now().strftime('%Y-%m-%d')
 
     # Lowercase, replace special chars with whitespace, join on whitespace.
     cleantitle = '-'.join(re.sub('[^a-z0-9]+', ' ', title.lower()).split())
 
     fname = cleantitle
+    if prefixtoday:
+        fname = today + "_" + cleantitle
+
     fpath_cmd = fname + '.command'
 
     log.info('Writing command to %s', fpath_cmd)
