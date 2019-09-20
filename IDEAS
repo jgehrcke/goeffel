@@ -44,10 +44,6 @@
 
 ## Misc notes
 
-- The figures included in README.md render nicely in GitHub's rendered view,
-  but they do not show on the PyPI project's landing page. Refer to figures
-  by github raw URL instead of relative links?
-
 - Add (a) metric(s) related to the network throughput of a process and/or TCP
   metrics in particular. This is more difficult on Linux than it should be.
   Also see https://unix.stackexchange.com/q/224201 and nethogs source.

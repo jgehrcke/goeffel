@@ -139,7 +139,7 @@ goeffel-analysis plot \
   --metric proc_num_ip_sockets_open
 ```
 Example output figure:
-![goeffel-analysis plot example output image](docs/figs/analysis_magic_example_small.png?raw=true "goeffel-analysis plot example")
+![goeffel-analysis plot example output image](https://raw.githubusercontent.com/jgehrcke/goeffel/0.2.0/docs/figs/analysis_magic_example_small.png "goeffel-analysis plot example")
 
 ### `goeffel-analysis flexplot`: generic plot command
 
@@ -163,7 +163,7 @@ $ goeffel-analysis flexplot \
 ```
 
 Example output figure:
-![goeffel-analysis flexplot example output image](docs/figs/analysis_plot_example_small.png?raw=true "goeffel-analysis flexplot example")
+![goeffel-analysis flexplot example output image](https://raw.githubusercontent.com/jgehrcke/goeffel/0.2.0/docs/figs/analysis_plot_example_small.png "goeffel-analysis flexplot example")
 
 
 # Background and details
