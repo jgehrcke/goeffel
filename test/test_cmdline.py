@@ -142,3 +142,23 @@ def test_analysis_plot(clitest, testprocess):
         f"goeffel-analysis plot out.hdf5"
     )
     clitest.assert_in_stderr(['Writing figure as PNG to'])
+
+
+def test_analysis_plot_additional_metric(clitest, testprocess):
+    clitest.run(
+        f"goeffel --pid {testprocess.pid} -i 0.3 -t 1 --outfile-hdf5-path out.hdf5"
+    )
+    clitest.run(
+        f"goeffel-analysis plot out.hdf5 --metric system_loadavg1"
+    )
+    clitest.assert_in_stderr(['Writing figure as PNG to'])
+
+
+def test_analysis_flexplot(clitest, testprocess):
+    clitest.run(
+        f"goeffel --pid {testprocess.pid} -i 0.3 -t 1 --outfile-hdf5-path out.hdf5"
+    )
+    clitest.run(
+        f"goeffel-analysis flexplot --series out.hdf5 'label' --column proc_num_ip_sockets_open 'ylabel' 'plottitle' 5"
+    )
+    clitest.assert_in_stderr(['Writing figure as PNG to'])
