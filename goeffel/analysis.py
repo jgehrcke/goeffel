@@ -43,35 +43,35 @@ logging.getLogger('numexpr').setLevel('ERROR')
 
 COLUMN_PLOT_CONFIGS = {
     'proc_cpu_util_percent_total': {
-        'y_label': 'Process CPU util (total) [%]',
+        'y_label': 'Proc CPU util (total) [%]',
         'plot_title': 'foo',
         'rolling_wdw_width_seconds': 5,
     },
     'proc_disk_read_rate_hz': {
-        'y_label': 'Process read() rate [Hz]',
+        'y_label': 'Proc read() rate [Hz]',
         'plot_title': 'foo',
         'rolling_wdw_width_seconds': 5,
         'yscale': 'symlog'
     },
     'proc_disk_write_rate_hz': {
-        'y_label': 'Process write() rate [Hz]',
+        'y_label': 'Proc write() rate [Hz]',
         'plot_title': 'foo',
         'rolling_wdw_width_seconds': 5,
         'yscale': 'symlog'
     },
     'proc_disk_write_throughput_mibps': {
-        'y_label': 'Process write() tp [MiB/s]',
+        'y_label': 'Proc write() tp [MiB/s]',
         'plot_title': 'foo',
         'rolling_wdw_width_seconds': 5,
         'yscale': 'symlog'
     },
     'proc_num_ip_sockets_open': {
-        'y_label': 'Process IP socket count',
+        'y_label': 'Proc IP socket count',
         'plot_title': 'foo',
         'rolling_wdw_width_seconds': 0,
     },
     'proc_mem_rss_percent': {
-         'y_label': 'Process RSS mem [%]',
+         'y_label': 'Proc RSS mem [%]',
          'plot_title': 'foo',
          'rolling_wdw_width_seconds': 5
     },
