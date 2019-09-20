@@ -454,7 +454,6 @@ def plot_simple_magic(dataframe, metadata):
     else:
         subtitle += f'PID command: {_metadata("pid_command")}'
 
-
     fig.text(
         0.5, 0.970,
         subtitle,

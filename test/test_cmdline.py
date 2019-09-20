@@ -159,6 +159,7 @@ def test_analysis_flexplot(clitest, testprocess):
         f"goeffel --pid {testprocess.pid} -i 0.3 -t 1 --outfile-hdf5-path out.hdf5"
     )
     clitest.run(
-        f"goeffel-analysis flexplot --series out.hdf5 'label' --column proc_num_ip_sockets_open 'ylabel' 'plottitle' 5"
+        "goeffel-analysis flexplot --series out.hdf5 'label' "
+        "--column proc_num_ip_sockets_open 'ylabel' 'plottitle' 5"
     )
     clitest.assert_in_stderr(['Writing figure as PNG to'])
