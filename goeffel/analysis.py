@@ -703,7 +703,7 @@ def plot_column_multiple_subplots(dataframe_label_pairs, column_dict):
     plt.subplots_adjust(
         hspace=0.05, left=0.05, right=0.97, bottom=0.1, top=0.95)
     # plt.tight_layout()
-    savefig(column_dict['plot_title'])
+    savefig(column_dict['plot_title'], prefixtoday=True)
 
 
 def plot_subplot(ax, column_plot_config, series, plotsettings):
@@ -927,13 +927,16 @@ def parse_hdf5file_into_dataframe(
     return df
 
 
-def savefig(title):
-    # today = datetime.now().strftime('%Y-%m-%d')
+def savefig(title, prefixtoday=False):
+    today = datetime.now().strftime('%Y-%m-%d')
 
     # Lowercase, replace special chars with whitespace, join on whitespace.
     cleantitle = '-'.join(re.sub('[^a-z0-9]+', ' ', title.lower()).split())
 
     fname = cleantitle
+    if prefixtoday:
+        fname = today + "_" + cleantitle
+
     fpath_cmd = fname + '.command'
 
     log.info('Writing command to %s', fpath_cmd)
