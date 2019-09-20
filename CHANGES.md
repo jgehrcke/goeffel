@@ -1,11 +1,15 @@
 
-## 0.3.0-dev
+## 0.3.0 (2019-09-20)
 
 `goeffel-analysis`:
 
-- Renamed `magic` command to `plot`, and `plot` to `flexplot`.
-- `plot`: new default metric `proc_mem_rss_percent`, do not plot `system_loadavg1` anymore by default.
-- `plot`: improved subtitle
+- Rename `magic` command to `plot`, and `plot` to `flexplot`.
+- `plot`:
+    - New default metric `proc_mem_rss_percent`, do not plot `system_loadavg1` anymore by default.
+    - Cosmetic changes (improved subtitle, and others)
+    - More complete help output.
+    - Set rolling window width to 10 s.
+    - Clean up log output a bit.
 
 
 ## 0.2.0 (2019-08-13)

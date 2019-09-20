@@ -59,7 +59,7 @@ import tables
 import psutil
 
 
-__version__ = "0.3.0-dev"
+__version__ = "0.3.0"
 
 
 # If the program is invoked with a PID command and the process goes away then
