@@ -8,31 +8,32 @@ Built for Linux. Windows and Mac OS support might come.
 
 For a list of the currently supported metrics see [below](#measurands).
 
+## Highlights
+
+- Comes with a data plotting tool separate from the data acquisition program.
+- High sampling rate: the default sampling interval of `0.5 s` makes narrow spikes visible.
+- Values measurement correctness highly (see [technical notes](#technical-notes)).
+- Values interoperability: data files can be read with any HDF5 reader such as with [pandas.read_hdf()](https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.read_hdf.html), or with [PyTables](https://www.pytables.org). See [tips and tricks](#tips-and-tricks).
+- Can monitor a program subject to process ID changes (for longevity experiments where the monitored process may occasionally restart).
+- Can run indefinitely, with predictable disk space requirements (output file rotation and retention policy).
+- Keeps your data organized: the time series data is written into a structured [HDF5](https://en.wikipedia.org/wiki/Hierarchical_Data_Format) file annotated with metadata (including program invocation time, system hostname, a custom label, the Goeffel software version, and others).
+
 The name, [Göffel](https://de.wikipedia.org/wiki/Essbesteck#Mischformen), is German for [spork](https://en.wikipedia.org/wiki/Spork):
 
-![image of a spork](docs/figs/spork.jpg?raw=true "image of spork / Göffel")
+![image of a spork](https://raw.githubusercontent.com/jgehrcke/goeffel/0.2.0/docs/figs/spork.jpg?raw=true "image of spork / Göffel")
 
 Convenient, right?
 
-## Highlights
-
-- High sampling rate: the default sampling interval of `0.5 s` makes narrow spikes visible.
-- Can monitor a program subject to process ID changes (for longevity experiments where the monitored process occasionally restarts, for instance as of fail-over scenarios).
-- Can run indefinitely. Has predictable disk space requirements (output file rotation and retention policy).
-- Keeps your data organized: the time series data is written into a structured [HDF5](https://en.wikipedia.org/wiki/Hierarchical_Data_Format) file annotated with relevant metadata (also including program invocation time, system hostname, a custom label, the Goeffel software version, and others).
-- Interoperability: output files can be read with any HDF5 reader such as [PyTables](https://www.pytables.org) and especially with [pandas.read_hdf()](https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.read_hdf.html). See [tips and tricks](#tips-and-tricks).
-- Values measurement correctness very highly (see [technical notes](#technical-notes)).
-- Comes with a data plotting tool separate from the data acquisition program.
 
 # Download & installation
 
-The latest Goeffel release can be downloaded and installed from PyPI, via pip:
+The latest release can be downloaded and installed from PyPI, via pip:
 
 ```
 $ pip install goeffel
 ```
 
-pip can also install the latest development version of Goeffel:
+pip can also install the latest development version:
 
 ```
 $ pip install git+https://github.com/jgehrcke/goeffel
@@ -42,7 +43,7 @@ $ pip install git+https://github.com/jgehrcke/goeffel
 
 ## `goeffel`: data acquisition
 
-Invoke Goeffel with the `--pid <pid>` argument if the process ID of the target process is known.
+You can invoke Goeffel with the `--pid <pid>` argument.
 In this mode, `goeffel` stops the measurement and terminates itself once the process with the given ID goes away. Example:
 
 ```text
@@ -63,7 +64,7 @@ $ goeffel --pid 29019
 
 
 For measuring beyond the process lifetime use `--pid-command <command>`.
-In the following example, I use the [pgrep](https://linux.die.net/man/1/pgrep) utility is for discovering the newest [stress](https://linux.die.net/man/1/stress) process:
+In the following example, I use the [pgrep](https://linux.die.net/man/1/pgrep) utility for discovering a certain process (which is based on [stress](https://linux.die.net/man/1/stress) in this case):
 
 ```text
 $ goeffel --pid-command 'pgrep stress --newest'
