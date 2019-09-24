@@ -20,7 +20,7 @@ For a list of the currently supported metrics see [below](#measurands).
 
 The name, [Göffel](https://de.wikipedia.org/wiki/Essbesteck#Mischformen), is German for [spork](https://en.wikipedia.org/wiki/Spork):
 
-![image of a spork](docs/figs/spork.jpg?raw=true "image of spork / Göffel")
+![image of a spork](https://raw.githubusercontent.com/jgehrcke/goeffel/0.2.0/docs/figs/spork.jpg?raw=true "image of spork / Göffel")
 
 Convenient, right?
 
