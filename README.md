@@ -27,13 +27,13 @@ Convenient, right?
 
 # Download & installation
 
-The latest Goeffel release can be downloaded and installed from PyPI, via pip:
+The latest release can be downloaded and installed from PyPI, via pip:
 
 ```
 $ pip install goeffel
 ```
 
-pip can also install the latest development version of Goeffel:
+pip can also install the latest development version:
 
 ```
 $ pip install git+https://github.com/jgehrcke/goeffel
@@ -43,7 +43,7 @@ $ pip install git+https://github.com/jgehrcke/goeffel
 
 ## `goeffel`: data acquisition
 
-Invoke Goeffel with the `--pid <pid>` argument if the process ID of the target process is known.
+You can invoke Goeffel with the `--pid <pid>` argument.
 In this mode, `goeffel` stops the measurement and terminates itself once the process with the given ID goes away. Example:
 
 ```text
@@ -64,7 +64,7 @@ $ goeffel --pid 29019
 
 
 For measuring beyond the process lifetime use `--pid-command <command>`.
-In the following example, I use the [pgrep](https://linux.die.net/man/1/pgrep) utility is for discovering the newest [stress](https://linux.die.net/man/1/stress) process:
+In the following example, I use the [pgrep](https://linux.die.net/man/1/pgrep) utility for discovering a certain process (which is based on [stress](https://linux.die.net/man/1/stress) in this case):
 
 ```text
 $ goeffel --pid-command 'pgrep stress --newest'
