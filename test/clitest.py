@@ -140,14 +140,12 @@ class CmdlineInterfaceTest(object):
         try:
             shutil.rmtree(self.rundir)
         except OSError:
-            # Does not exist, fine.
+            # This typically means: does not exist.
             pass
 
     def add_file(self, name, content_bytestring):
         assert isinstance(content_bytestring, binary_type)
         p = os.path.join(self.rundir, name)
-        # 'b' mode is required on Python 3, otherwise
-        # TypeError: must be str, not bytes.
         with open(p, "wb") as f:
             f.write(content_bytestring)
 
