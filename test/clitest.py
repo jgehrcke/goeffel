@@ -34,23 +34,23 @@ WINDOWS = sys.platform == "win32"
 log = logging.getLogger("clitest")
 
 
-class CmdlineTestError(Exception):
+class ClitestError(Exception):
     pass
 
 
-class WrongExitCode(CmdlineTestError):
+class WrongExitCode(ClitestError):
     pass
 
 
-class WrongStdout(CmdlineTestError):
+class WrongStdout(ClitestError):
     pass
 
 
-class WrongStderr(CmdlineTestError):
+class WrongStderr(ClitestError):
     pass
 
 
-class WrongFile(CmdlineTestError):
+class WrongFile(ClitestError):
     pass
 
 
@@ -199,7 +199,7 @@ class CmdlineInterfaceTest(object):
                 "Error running test subprocess. Traceback:\n%s",
                 traceback.format_exc()
             )
-            raise CmdlineTestError("Error during attempt to run child.")
+            raise ClitestError("Error during attempt to run child.")
         finally:
             of.close()
             ef.close()
