@@ -38,19 +38,19 @@ class ClitestError(Exception):
     pass
 
 
-class WrongExitCode(ClitestError):
+class UnexpectedExitCode(ClitestError):
     pass
 
 
-class WrongStdout(ClitestError):
+class UnexpectedStdout(ClitestError):
     pass
 
 
-class WrongStderr(ClitestError):
+class UnexpectedStderr(ClitestError):
     pass
 
 
-class WrongFile(ClitestError):
+class UnexpectedFile(ClitestError):
     pass
 
 
@@ -222,17 +222,17 @@ class CmdlineInterfaceTest(object):
                 log.info("Cannot decode stderr: %s", e)
             log.info("Test stderr repr:\n%r", self.rawerr)
         if rc != expect_rc:
-            raise WrongExitCode("Expected %s, got %s" % (expect_rc, rc))
+            raise UnexpectedExitCode("Expected %s, got %s" % (expect_rc, rc))
 
     def assert_no_stderr(self):
-        """Raise `WrongStderr` if standard error is not empty."""
+        """Raise `UnexpectedStderr` if standard error is not empty."""
         if not self.rawerr == b"":
-            raise WrongStderr("stderr not empty.")
+            raise UnexpectedStderr("stderr not empty.")
 
     def assert_no_stdout(self):
-        """Raise `WrongStdout` if standard output is not empty."""
+        """Raise `UnexpectedStdout` if standard output is not empty."""
         if not self.rawout == b"":
-            raise WrongStdout("stdout not empty.")
+            raise UnexpectedStdout("stdout not empty.")
 
     def assert_in_stdout(self, strings, encoding=None):
         """Verify that one or more strings is/are in standard output.
@@ -246,12 +246,12 @@ class CmdlineInterfaceTest(object):
         list of strings of the same type.
 
         Raises:
-            `WrongStdout` in case of mismatch.
+            `UnexpectedStdout` in case of mismatch.
         """
         out, expected = self._klazonk(self.rawout, strings, encoding)
         for s in expected:
             if s not in out:
-                raise WrongStdout("'%r' not in stdout." % s)
+                raise UnexpectedStdout("'%r' not in stdout." % s)
 
     def assert_not_in_stdout(self, strings, encoding=None):
         """Verify that one or more strings is/are not in standard output.
@@ -265,12 +265,12 @@ class CmdlineInterfaceTest(object):
         strings of the same type.
 
         Raises:
-            `WrongStdout` in case of mismatch.
+            `UnexpectedStdout` in case of mismatch.
         """
         out, forbidden = self._klazonk(self.rawout, strings, encoding)
         for s in forbidden:
             if s in out:
-                raise WrongStdout("'%r' must not be in stdout." % s)
+                raise UnexpectedStdout("'%r' must not be in stdout." % s)
 
     def assert_in_stderr(self, strings, encoding=None):
         """Verify that one or more strings is/are in standard error.
@@ -284,12 +284,12 @@ class CmdlineInterfaceTest(object):
         list of strings of the same type.
 
         Raises:
-            `WrongStderr` in case of mismatch.
+            `UnexpectedStderr` in case of mismatch.
         """
         err, expected = self._klazonk(self.rawerr, strings, encoding)
         for s in expected:
             if s not in err:
-                raise WrongStderr("'%r' not in stderr." % s)
+                raise UnexpectedStderr("'%r' not in stderr." % s)
 
     def assert_not_in_stderr(self, strings, encoding=None):
         """Verify that one or more strings is/are not in standard error.
@@ -303,12 +303,12 @@ class CmdlineInterfaceTest(object):
         strings of the same type.
 
         Raises:
-            `WrongStderr` in case of mismatch.
+            `UnexpectedStderr` in case of mismatch.
         """
         err, forbidden = self._klazonk(self.rawerr, strings, encoding)
         for s in forbidden:
             if s in err:
-                raise WrongStderr("'%r' must not be in stderr." % s)
+                raise UnexpectedStderr("'%r' must not be in stderr." % s)
 
     def assert_is_stdout(self, s, encoding=None):
         """Validate that `s` is standard output of test process.
@@ -316,13 +316,13 @@ class CmdlineInterfaceTest(object):
         If `s` is unicode type, decode binary stdout data before comparison.
 
         Raises:
-            `WrongStdout` in case of mismatch.
+            `UnexpectedStdout` in case of mismatch.
         """
         out = self.rawout
         if isinstance(s, text_type):
             out = self._decode(self.rawout, encoding)
         if s != out:
-            raise WrongStdout("stdout is not '%r'." % s)
+            raise UnexpectedStdout("stdout is not '%r'." % s)
 
     def assert_is_stderr(self, s, encoding=None):
         """Validate that `s` is standard error of test process.
@@ -330,13 +330,13 @@ class CmdlineInterfaceTest(object):
         If `s` is unicode type, decode binary stderr data before comparison.
 
         Raises:
-            `WrongStderr` in case of mismatch.
+            `UnexpectedStderr` in case of mismatch.
         """
         err = self.rawerr
         if isinstance(s, text_type):
             err = self._decode(self.rawerr, encoding)
         if s != err:
-            raise WrongStderr("stderr is not '%r'." % s)
+            raise UnexpectedStderr("stderr is not '%r'." % s)
 
     def _klazonk(self, out_or_err, string_or_stringlist, encoding):
         """Validate that `string_or_stringlist` is either a byte or unicode
@@ -402,10 +402,10 @@ class CmdlineInterfaceTest(object):
             testpath = os.path.join(self.rundir, path)
             if not os.path.exists(testpath):
                 if not invert:
-                    raise WrongFile("Path does not exist: '%s'" % path)
+                    raise UnexpectedFile("Path does not exist: '%s'" % path)
                 return
             if invert:
-                raise WrongFile("Path should not exist: '%s'" % path)
+                raise UnexpectedFile("Path should not exist: '%s'" % path)
 
 
 def _list_string_type(o):
