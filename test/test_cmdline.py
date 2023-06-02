@@ -116,7 +116,7 @@ def test_hdf5_path(clitest, testprocess):
 def test_a_number_of_features_together(clitest, testprocess):
     clitest.run(
         f"goeffel --pid-command 'echo {testprocess.pid}' "
-        "--diskstats sda --sampling-interval 0.3 -t 1"
+        "--diskstats all --sampling-interval 0.3 -t 1"
     )
 
 
