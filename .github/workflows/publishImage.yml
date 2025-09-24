@@ -118,6 +118,8 @@ jobs:
         id: build
         uses: docker/build-push-action@v6
         with:
+          context: .
+          file: ./docker/Dockerfile
           build-args: |
             APP_BUILD_VERSION=${{steps.appversion.outputs.appversion}}
             SOURCE=${{inputs.pip_source}}
