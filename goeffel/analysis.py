@@ -211,6 +211,18 @@ def parse_cmdline_args():
         action='store_true'
     )
 
+    spparser.add_argument(
+        '--mean-style',
+        default="None",
+        help="The matplotlib linestyle to draw for rolling mean."
+    )
+
+    spparser.add_argument(
+        '--raw-style',
+        default="None",
+        help="The matplotlib linestyle to draw for raw samples."
+    )
+
     fpparser = subparsers.add_parser('flexplot', help='Plot data in a flexible manner')
     fpparser.add_argument(
         '--series',
@@ -253,6 +265,17 @@ def parse_cmdline_args():
         type=float,
         metavar=('YLIM_MIN', 'YLIM_MAX'),
         help='Set a custom global y limit (min, max) to all plots'
+    )
+    fpparser.add_argument(
+        '--mean-style',
+        default="None",
+        help="The matplotlib linestyle to draw for rolling mean."
+    )
+
+    fpparser.add_argument(
+        '--raw-style',
+        default="None",
+        help="The matplotlib linestyle to draw for raw samples."
     )
     global ARGS
     ARGS = parser.parse_args()
@@ -718,7 +741,7 @@ def plot_subplot(ax, column_plot_config, series, plotsettings):
         series = series / ARGS.normalization_factor
 
     ax = series.plot(
-        linestyle='None',
+        linestyle=ARGS.raw_style,
         color='gray',
         marker='.',
         markersize=3,
@@ -757,8 +780,7 @@ def plot_subplot(ax, column_plot_config, series, plotsettings):
         rolling_window_mean.index = rolling_window_mean.index - offset
 
         rolling_window_mean.plot(
-            # linestyle='solid',
-            linestyle='None',
+            linestyle=ARGS.mean_style,
             color='black',
             marker='.',
             markersize=1,
