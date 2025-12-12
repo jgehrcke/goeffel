@@ -1,0 +1,17 @@
+# example compose building dockerfile from source
+# and running goeffel command without any arguments
+services:
+  goeffel:
+    # required for goeffel to share PID address space with host
+    pid: host
+    # required for goeffel to have permission to access PIDs
+    cap_add:
+      - CAP_SYS_PTRACE
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile
+    # hdf5 files are written to /app
+    volumes:
+      - ./data:/app
+    command:
+      - 'goeffel'

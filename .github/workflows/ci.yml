@@ -1,6 +1,11 @@
 name: ci
 
-on: [push]
+on:
+  push:
+    paths-ignore:
+      - 'README.md'
+      - '.github/**'
+  workflow_call:
 
 jobs:
   test:
